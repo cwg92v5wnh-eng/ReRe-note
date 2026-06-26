@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja" data-page="notebooks">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LectureNote - ノートブック</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section class="auth-screen" aria-label="ログイン">
+      <form id="authForm" class="auth-card">
+        <div class="brand auth-brand">
+          <span class="brand-mark">⌘</span>
+          <span class="brand-name">LectureNote</span>
+        </div>
+        <label class="auth-field">
+          <span>メールアドレス</span>
+          <input id="authEmailInput" type="email" autocomplete="email" placeholder="name@example.com" required />
+        </label>
+        <div class="auth-buttons">
+          <button id="loginBtn" class="primary-button" type="submit">ログイン</button>
+          <button id="registerBtn" class="ghost-button" type="button">登録</button>
+        </div>
+        <button id="microsoftLoginBtn" class="microsoft-button" type="button">Microsoftでログイン</button>
+        <p id="authMessage" class="auth-message" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <div class="app-shell notebooks-shell">
+      <aside class="app-rail">
+        <a class="brand home-link" href="./LectureNote.html" aria-label="ホームへ戻る">
+          <span class="brand-mark">⌘</span>
+          <span class="brand-name">LectureNote</span>
+        </a>
+
+        <nav class="rail-nav" aria-label="ナビゲーション">
+          <button class="rail-item is-active" type="button" aria-current="page">
+            <span class="rail-icon">▣</span>
+            <span>ノートブック</span>
+          </button>
+          <button class="rail-item" type="button">
+            <span class="rail-icon">▤</span>
+            <span>すべてのノート</span>
+          </button>
+          <button class="rail-item" type="button">
+            <span class="rail-icon">★</span>
+            <span>お気に入り</span>
+          </button>
+        </nav>
+        <div class="user-strip">
+          <button id="accountMenuBtn" class="account-menu-button" type="button" aria-haspopup="dialog" aria-expanded="false">
+            <span id="currentUserLabel"></span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="notebooks-main">
+        <header class="notebooks-header">
+          <label class="search-shell" for="notebookSearchInput">
+            <span class="search-icon">⌕</span>
+            <input id="notebookSearchInput" type="search" placeholder="ノートブックを検索..." autocomplete="off" />
+          </label>
+
+          <div class="header-actions">
+            <button id="newNotebookBtn" class="primary-button header-button" type="button">＋ 新規ノートブック</button>
+          </div>
+        </header>
+
+        <section class="notebooks-board">
+          <div class="notebooks-content">
+            <div id="notebookList" class="notebook-grid" aria-live="polite"></div>
+            <button id="showMoreNotebooksBtn" class="all-notes-link notebook-more-button" type="button">さらに表示</button>
+          </div>
+
+          <aside class="recent-panel panel">
+            <div class="panel-header">
+              <h2>最近のノート</h2>
+            </div>
+            <div id="recentNoteList" class="recent-note-list"></div>
+            <button id="showMoreRecentBtn" class="all-notes-link" type="button">さらに表示</button>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <section id="notebookCreateOverlay" class="create-overlay" hidden aria-label="新しいノートブック">
+      <div class="create-page">
+        <header class="create-page-header">
+          <button id="closeNotebookCreateBtn" class="create-back-button" type="button" aria-label="戻る">←</button>
+          <div>
+            <h1>新しいノートブック</h1>
+            <p>ノートを整理するための新しいノートブックを作成します。</p>
+          </div>
+        </header>
+
+        <form id="notebookCreateForm" class="create-card">
+          <div class="create-form-side">
+            <label class="create-field">
+              <span>タイトル <strong>*</strong></span>
+              <input id="notebookNameInput" type="text" value="講義ノート" autocomplete="off" required />
+            </label>
+
+            <fieldset class="create-fieldset">
+              <legend>ノートの色 <strong>*</strong></legend>
+              <div id="notebookColorChoices" class="color-choice-row">
+                <button class="color-choice is-selected" type="button" data-color="green" aria-label="緑">✓</button>
+                <button class="color-choice" type="button" data-color="blue" aria-label="青"></button>
+                <button class="color-choice" type="button" data-color="violet" aria-label="紫"></button>
+                <button class="color-choice" type="button" data-color="orange" aria-label="黄"></button>
+                <button class="color-choice" type="button" data-color="coral" aria-label="赤"></button>
+                <button class="color-choice" type="button" data-color="gray" aria-label="灰"></button>
+              </div>
+            </fieldset>
+
+            <fieldset class="create-fieldset">
+              <legend>アイコン <strong>*</strong></legend>
+              <div id="notebookIconChoices" class="icon-choice-row">
+                <button class="icon-choice is-selected" type="button" data-icon="book" aria-label="本"></button>
+                <button class="icon-choice" type="button" data-icon="doc" aria-label="書類"></button>
+                <button class="icon-choice" type="button" data-icon="bookmark" aria-label="しおり"></button>
+                <button class="icon-choice" type="button" data-icon="cap" aria-label="学習"></button>
+                <button class="icon-choice" type="button" data-icon="idea" aria-label="アイデア"></button>
+                <button class="icon-choice" type="button" data-icon="case" aria-label="ケース"></button>
+                <button class="icon-choice" type="button" data-icon="folder" aria-label="フォルダ"></button>
+                <button class="icon-choice" type="button" data-icon="star" aria-label="星"></button>
+              </div>
+            </fieldset>
+          </div>
+
+          <div class="create-preview-side">
+            <h2>プレビュー</h2>
+            <div id="notebookCreatePreview" class="create-preview-card" data-kind="green">
+              <div class="create-preview-accent"></div>
+              <div class="create-preview-icon" data-icon="book"></div>
+              <div class="create-preview-body">
+                <h3 id="notebookPreviewTitle">講義ノート</h3>
+                <div class="create-preview-line"></div>
+                <p>0 個のノート</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="create-actions">
+            <button id="cancelNotebookCreateBtn" class="ghost-button" type="button">キャンセル</button>
+            <button class="primary-button" type="submit">作成</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <template id="notebookItemTemplate">
+      <div class="notebook-card" role="button" tabindex="0">
+        <div class="notebook-card-top">
+          <span class="notebook-badge"></span>
+          <button class="notebook-menu-button" type="button" aria-label="ノートブックメニュー" aria-expanded="false">…</button>
+          <div class="notebook-menu" hidden>
+            <button class="notebook-menu-item notebook-important" type="button">重要</button>
+            <button class="notebook-menu-item danger notebook-delete" type="button">削除</button>
+          </div>
+        </div>
+        <h3 class="notebook-card-title"></h3>
+        <div class="notebook-card-meta">
+          <span class="notebook-meta-item notebook-note-count"></span>
+          <span class="notebook-meta-item notebook-updated"></span>
+        </div>
+        <div class="notebook-tags"></div>
+      </div>
+    </template>
+
+    <template id="recentNoteTemplate">
+      <button class="recent-note-item" type="button">
+        <span class="recent-note-star">★</span>
+        <div class="recent-note-main">
+          <div class="recent-note-title-row">
+            <span class="recent-note-title"></span>
+          </div>
+          <div class="recent-note-tags"></div>
+        </div>
+        <span class="recent-note-time"></span>
+      </button>
+    </template>
+
+    <div id="accountOverlay" class="account-overlay" hidden>
+      <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountDialogTitle">
+        <button id="closeAccountMenuBtn" class="account-dialog-close" type="button" aria-label="閉じる">×</button>
+        <p class="account-dialog-label">Microsoft アカウント</p>
+        <h2 id="accountDialogTitle" class="account-dialog-email"></h2>
+        <div class="account-dialog-actions">
+          <button id="switchAccountBtn" class="account-dialog-button" type="button">別のアカウントでログイン</button>
+          <button id="logoutBtn" class="account-dialog-button danger" type="button">ログアウト</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

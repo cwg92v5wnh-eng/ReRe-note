@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja" data-page="notes">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LectureNote - ノート</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section class="auth-screen" aria-label="ログイン">
+      <form id="authForm" class="auth-card">
+        <div class="brand auth-brand">
+          <span class="brand-mark">⌘</span>
+          <span class="brand-name">LectureNote</span>
+        </div>
+        <label class="auth-field">
+          <span>メールアドレス</span>
+          <input id="authEmailInput" type="email" autocomplete="email" placeholder="name@example.com" required />
+        </label>
+        <div class="auth-buttons">
+          <button id="loginBtn" class="primary-button" type="submit">ログイン</button>
+          <button id="registerBtn" class="ghost-button" type="button">登録</button>
+        </div>
+        <button id="microsoftLoginBtn" class="microsoft-button" type="button">Microsoftでログイン</button>
+        <p id="authMessage" class="auth-message" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <div class="app-shell notebooks-shell notes-shell">
+      <aside class="app-rail notes-rail">
+        <a class="brand home-link" href="./LectureNote.html" aria-label="ホームへ戻る">
+          <span class="brand-mark">⌘</span>
+          <span class="brand-name">LectureNote</span>
+        </a>
+
+        <section class="notes-sidebar-main" aria-label="ノート一覧">
+          <span id="notebookTitle" class="visually-hidden">ノート</span>
+          <span id="noteCount" class="visually-hidden">0</span>
+          <div id="noteList" class="note-list" aria-live="polite"></div>
+        </section>
+
+        <div class="user-strip">
+          <button id="accountMenuBtn" class="account-menu-button" type="button" aria-haspopup="dialog" aria-expanded="false">
+            <span id="currentUserLabel"></span>
+          </button>
+        </div>
+      </aside>
+
+      <main class="notes-main">
+        <header class="topbar notes-actionbar">
+          <button id="newNoteBtn" class="primary-button icon-button" type="button" aria-label="新規ノート">＋</button>
+          <button id="deleteNoteBtn" class="ghost-button icon-button delete-note-button" type="button" aria-label="ノートを削除" disabled>−</button>
+        </header>
+
+        <section class="workspace notes-workspace">
+          <section class="editor panel">
+            <h2 id="editorTitle" class="visually-hidden">ノートを選択</h2>
+
+            <form id="noteForm" class="editor-form">
+              <div class="field body-field">
+                <div id="bodyInput" class="body-input rich-body-input" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="本文を入力"></div>
+              </div>
+            </form>
+          </section>
+        </section>
+
+        <div class="under-toolbar" aria-label="Formatting toolbar">
+          <div class="format-group">
+            <button id="sizeOneBtn" class="format-button size-button" type="button" aria-label="Text size 1" aria-pressed="false">1</button>
+            <button id="sizeTwoBtn" class="format-button size-button" type="button" aria-label="Text size 2" aria-pressed="false">2</button>
+            <button id="sizeThreeBtn" class="format-button size-button" type="button" aria-label="Text size 3" aria-pressed="false">3</button>
+            <span class="format-divider" aria-hidden="true"></span>
+            <button id="boldBtn" class="format-button" type="button" aria-label="Bold" aria-pressed="false">B</button>
+            <button id="underlineBtn" class="format-button" type="button" aria-label="Underline" aria-pressed="false">U</button>
+            <button id="pandaHighlightBtn" class="format-button panda-highlight-button" type="button" aria-label="パンダハイライト" aria-pressed="false">H</button>
+            <div id="textColorChoices" class="text-color-choices" aria-label="Text color">
+              <button class="color-chip" type="button" data-color="#22201b" aria-label="Text color black"></button>
+              <button class="color-chip" type="button" data-color="#425a4a" aria-label="Text color green"></button>
+              <button class="color-chip" type="button" data-color="#2f6f9f" aria-label="Text color blue"></button>
+              <button class="color-chip" type="button" data-color="#7b5bb5" aria-label="Text color purple"></button>
+              <button class="color-chip" type="button" data-color="#b47a24" aria-label="Text color yellow"></button>
+              <button class="color-chip" type="button" data-color="#b65345" aria-label="Text color red"></button>
+              <button class="color-chip" type="button" data-color="#6f675d" aria-label="Text color gray"></button>
+            </div>
+          </div>
+          <input id="imageInput" class="visually-hidden" type="file" accept="image/*" />
+          <button id="freeNoteBtn" class="free-note-button" type="button">メモ</button>
+          <span id="aiFormatStatus" class="ai-format-status" aria-live="polite"></span>
+          <div class="toolbar-more">
+            <button id="toolbarMoreBtn" class="toolbar-more-button" type="button" aria-label="その他のツール" aria-expanded="false">↑</button>
+            <div id="toolbarMoreMenu" class="toolbar-more-menu" hidden>
+              <button id="aiFormatBtn" class="toolbar-more-item ai-format-button" type="button">AIで整える</button>
+              <button id="imageInsertBtn" class="toolbar-more-item" type="button" aria-label="画像を追加">画像</button>
+              <button id="richPasteBtn" class="toolbar-more-item" type="button">書式貼付</button>
+              <button id="strikeBtn" class="toolbar-more-item" type="button" aria-label="Strikethrough" aria-pressed="false">取り消し線</button>
+              <button id="highlightBtn" class="toolbar-more-item highlight-button" type="button" aria-label="蛍光ペン" aria-pressed="false">蛍光ペン</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <template id="noteItemTemplate">
+      <button class="note-item" type="button">
+        <div class="note-item-top">
+          <div>
+            <h3 class="note-item-title"></h3>
+          </div>
+          <span class="note-item-star" aria-hidden="true">★</span>
+        </div>
+        <p class="note-item-date"></p>
+      </button>
+    </template>
+
+    <div id="accountOverlay" class="account-overlay" hidden>
+      <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountDialogTitle">
+        <button id="closeAccountMenuBtn" class="account-dialog-close" type="button" aria-label="閉じる">×</button>
+        <p class="account-dialog-label">Microsoft アカウント</p>
+        <h2 id="accountDialogTitle" class="account-dialog-email"></h2>
+        <div class="account-dialog-actions">
+          <button id="switchAccountBtn" class="account-dialog-button" type="button">別のアカウントでログイン</button>
+          <button id="logoutBtn" class="account-dialog-button danger" type="button">ログアウト</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

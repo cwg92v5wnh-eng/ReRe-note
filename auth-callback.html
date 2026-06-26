@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LectureNote - Microsoft Login</title>
+  </head>
+  <body>
+    <p>Microsoftログインを完了しています...</p>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const payload = {
+        type: "lecture-note:microsoft-auth",
+        code: params.get("code") || "",
+        error: params.get("error") || "",
+        errorDescription: params.get("error_description") || "",
+        state: params.get("state") || "",
+      };
+
+      if (window.opener) {
+        window.opener.postMessage(payload, window.location.origin);
+        window.close();
+      } else {
+        document.body.textContent = payload.error || "ログイン画面へ戻ってください。";
+      }
+    </script>
+  </body>
+</html>
