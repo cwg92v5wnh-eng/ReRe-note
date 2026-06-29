@@ -612,19 +612,21 @@ async function loginWithMicrosoft() {
     els.microsoftLoginBtn.disabled = true;
     els.microsoftLoginBtn.textContent = "Microsoftへ接続中...";
 
-    const verifier = randomBase64Url(64);
-    const stateValue = randomBase64Url(24);
-    sessionStorage.setItem(MICROSOFT_AUTH_VERIFIER_KEY, verifier);
-    sessionStorage.setItem(MICROSOFT_AUTH_STATE_KEY, stateValue);
-
     const popup = window.open(
-      await buildMicrosoftAuthUrl(verifier, stateValue),
+      "about:blank",
       "lecture-note-microsoft-login",
       "width=520,height=680,popup=yes",
     );
     if (!popup) {
       throw new Error("popup_blocked");
     }
+
+    const verifier = randomBase64Url(64);
+    const stateValue = randomBase64Url(24);
+    sessionStorage.setItem(MICROSOFT_AUTH_VERIFIER_KEY, verifier);
+    sessionStorage.setItem(MICROSOFT_AUTH_STATE_KEY, stateValue);
+
+    popup.location.href = await buildMicrosoftAuthUrl(verifier, stateValue);
 
     const authResult = await waitForMicrosoftAuthMessage(stateValue);
     const token = await exchangeMicrosoftCode(authResult.code, verifier);
@@ -2980,6 +2982,7 @@ function renderCurrentPage() {
   }
   renderNotesPage();
 }
+
 
 
 
