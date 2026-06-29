@@ -65,6 +65,10 @@ button {
   white-space: nowrap;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .auth-screen {
   min-height: 100%;
   display: grid;
