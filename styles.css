@@ -524,52 +524,52 @@ html[data-page="notebooks"] .notebooks-shell::after {
   display: inline-flex;
   align-items: baseline;
   width: fit-content;
-  min-height: 28px;
-  padding: 5px 10px 6px;
-  border: 1px solid rgba(80, 95, 70, 0.12);
-  border-radius: 999px;
-  background: rgba(255, 252, 245, 0.9);
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #3f4f3f;
   line-height: 1;
-  letter-spacing: -0.035em;
-  box-shadow: 0 2px 8px rgba(60, 45, 25, 0.06);
+  letter-spacing: -0.055em;
+  box-shadow: none;
 }
 
 .brand-name-main {
-  font-size: 1rem;
+  font-size: 2.5rem;
   font-weight: 700;
 }
 
 .brand-name-separator {
   display: inline-flex;
-  width: 0.42em;
-  height: 0.42em;
+  width: 0.34em;
+  height: 0.34em;
   align-self: center;
-  margin: 0 0.18em;
+  margin: 0 0.14em;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(127, 183, 158, 0.68);
+  background: rgba(127, 183, 158, 0.76);
   color: transparent;
-  transform: translateY(0.02em);
+  transform: translateY(0.04em);
 }
 
 .brand-name-note {
   position: relative;
   z-index: 0;
   color: #4a3f35;
-  font-size: 0.92rem;
+  font-size: 2.3rem;
   font-weight: 500;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.045em;
 }
 
 .brand-name-note::after {
   content: "";
   position: absolute;
   z-index: -1;
-  left: -0.08em;
-  right: -0.1em;
-  bottom: -0.1em;
-  height: 0.42em;
+  left: -0.06em;
+  right: -0.08em;
+  bottom: 0.02em;
+  height: 0.22em;
   border-radius: 999px;
   background: rgba(127, 183, 158, 0.24);
 }
