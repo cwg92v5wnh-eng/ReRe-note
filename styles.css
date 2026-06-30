@@ -520,11 +520,18 @@ html[data-page="notebooks"] .notebooks-shell::after {
 
 .brand-mark {
   display: inline-flex;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(66, 90, 74, 0.18);
+  border-radius: 9px;
+  background: linear-gradient(145deg, #fff8ed, #e9f2e7);
   color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+  box-shadow: 0 6px 14px rgba(66, 90, 74, 0.08);
 }
 
 .brand-name {
