@@ -414,6 +414,9 @@ function handleOutsideToolbarMoreClick(event) {
 function saveBeforeUnload() {
   if (PAGE !== "notes" || !activeUser || !currentNote()) return;
   window.clearTimeout(state.saveTimer);
+  if (state.freehand) {
+    finishFreehandDrawing();
+  }
   updateCurrentNoteFromEditor({ render: false });
   saveToStorage();
 }
@@ -2292,9 +2295,90 @@ function toggleFreehandDrawing() {
     finishFreehandDrawing();
     return;
   }
+  const selectedFreehand = selectedFreehandImage();
+  if (selectedFreehand) {
+    editFreehandImage(selectedFreehand);
+    return;
+  }
   startFreehandDrawing();
 }
 
+
+function selectedFreehandImage() {
+  const selected = els.bodyInput?.querySelector(".note-image.is-selected.freehand-image");
+  return selected || null;
+}
+
+function editFreehandImage(figure) {
+  const image = figure?.querySelector("img");
+  if (!image?.src) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "freehand-drawing";
+  wrapper.contentEditable = "false";
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "freehand-canvas";
+  canvas.tabIndex = 0;
+  const width = Math.max(320, Math.min(720, Math.round(figure.getBoundingClientRect().width || image.naturalWidth || 520)));
+  const height = Math.max(120, Math.min(520, Math.round(image.naturalHeight * (width / Math.max(1, image.naturalWidth)) || 180)));
+  canvas.width = width * window.devicePixelRatio;
+  canvas.height = height * window.devicePixelRatio;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  const context = canvas.getContext("2d");
+  context.scale(window.devicePixelRatio, window.devicePixelRatio);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = 2.4;
+  context.strokeStyle = currentFreehandColor();
+
+  const resizeHandle = document.createElement("span");
+  resizeHandle.className = "freehand-resize-handle";
+  resizeHandle.setAttribute("aria-hidden", "true");
+  wrapper.append(canvas, resizeHandle);
+
+  figure.replaceWith(wrapper);
+  state.freehand = {
+    wrapper,
+    canvas,
+    context,
+    drawing: false,
+    hasInk: true,
+    maxY: height,
+    width,
+    height,
+    tool: "pen",
+    resizing: false,
+    loadingImage: true,
+  };
+  setFreehandButtonActive(true);
+  updateFreehandToolButtons();
+  canvas.addEventListener("pointerdown", startFreehandStroke);
+  canvas.addEventListener("pointermove", moveFreehandStroke);
+  canvas.addEventListener("pointerup", endFreehandStroke);
+  canvas.addEventListener("pointercancel", endFreehandStroke);
+  resizeHandle.addEventListener("pointerdown", startFreehandResize);
+  drawImageOnFreehandCanvas(image.src);
+  canvas.focus?.();
+}
+
+function drawImageOnFreehandCanvas(src) {
+  const drawing = state.freehand;
+  const image = new Image();
+  image.addEventListener("load", () => {
+    drawing.context.clearRect(0, 0, drawing.width, drawing.height);
+    if (state.freehand !== drawing) return;
+    drawing.context.drawImage(image, 0, 0, drawing.width, drawing.height);
+    drawing.loadingImage = false;
+    applyFreehandToolStyle();
+  });
+  image.addEventListener("error", () => {
+    if (state.freehand === drawing) drawing.loadingImage = false;
+  });
+  image.src = src;
+}
 function startFreehandDrawing() {
   if (!els.bodyInput || els.bodyInput.getAttribute("aria-disabled") === "true") return;
   restoreEditorSelection();
@@ -2337,6 +2421,7 @@ function startFreehandDrawing() {
     height,
     tool: "pen",
     resizing: false,
+    loadingImage: false,
   };
   setFreehandButtonActive(true);
   updateFreehandToolButtons();
@@ -2349,7 +2434,7 @@ function startFreehandDrawing() {
 }
 
 function startFreehandStroke(event) {
-  if (!state.freehand) return;
+  if (!state.freehand || state.freehand.loadingImage) return;
   event.preventDefault();
   state.freehand.drawing = true;
   state.freehand.canvas.setPointerCapture?.(event.pointerId);
@@ -2378,7 +2463,7 @@ function endFreehandStroke(event) {
 
 
 function startFreehandResize(event) {
-  if (!state.freehand) return;
+  if (!state.freehand || state.freehand.loadingImage) return;
   event.preventDefault();
   event.stopPropagation();
   state.freehand.resizing = true;
@@ -2477,6 +2562,7 @@ function finishFreehandDrawing() {
 
   const figure = createImageFigure(cropped.toDataURL("image/png"), "freehand");
   figure.classList.add("freehand-image");
+  figure.dataset.freehand = "true";
   figure.style.width = `${drawing.width}px`;
   const spacer = createImageSpacer();
   drawing.wrapper.replaceWith(figure, spacer);
