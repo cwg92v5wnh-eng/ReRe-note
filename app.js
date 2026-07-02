@@ -1924,7 +1924,7 @@ function ensureCurrentParagraphBlock() {
 
 function isEditableParagraphBlock(node) {
   if (!node || node === els.bodyInput || !els.bodyInput?.contains(node)) return false;
-  if (node.closest(".free-note, .note-image, .note-image-spacer")) return false;
+  if (node.closest(".free-note, .note-image")) return false;
   return true;
 }
 
@@ -2651,6 +2651,7 @@ function normalizeImageSpacer(figure) {
   if (next?.classList.contains("note-image-spacer")) return;
   if (next?.tagName === "P" && !next.textContent.trim() && !next.querySelector("img")) {
     next.className = "note-image-spacer";
+    next.dataset.indentLevel = next.dataset.indentLevel || "0";
     return;
   }
   if (!next) {
@@ -2661,6 +2662,7 @@ function normalizeImageSpacer(figure) {
 function createImageSpacer() {
   const spacer = document.createElement("div");
   spacer.className = "note-image-spacer";
+  spacer.dataset.indentLevel = "0";
   spacer.appendChild(document.createElement("br"));
   return spacer;
 }
