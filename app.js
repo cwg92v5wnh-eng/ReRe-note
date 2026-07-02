@@ -38,6 +38,7 @@ state.notebookLimit = NOTEBOOK_INITIAL_LIMIT;
 state.recentLimit = RECENT_INITIAL_LIMIT;
 state.pageInitialized = false;
 state.notebookMenuId = null;
+state.editingNotebookId = null;
 state.imageResize = null;
 state.freehand = null;
 state.toolbarMoreOpen = false;
@@ -1446,6 +1447,13 @@ function createNotebook() {
   const title = (els.notebookNameInput?.value || "").trim() || "講義ノート";
   const color = selectedCreateOption(els.notebookColorChoices, "color") || "green";
   const icon = selectedCreateOption(els.notebookIconChoices, "icon") || "book";
+
+  if (state.editingNotebookId) {
+    updateNotebookDetails(state.editingNotebookId, { title, color, icon });
+    closeNotebookCreate();
+    return;
+  }
+
   const notebook = createNotebookObject(title, color, icon);
   state.notebooks = [notebook, ...state.notebooks];
   state.selectedNotebookId = notebook.id;
@@ -1456,15 +1464,34 @@ function createNotebook() {
 }
 
 function openNotebookCreate() {
+  state.editingNotebookId = null;
+  openNotebookForm({ title: "講義ノート", color: "green", icon: "book", mode: "create" });
+}
+
+function openNotebookEdit(notebookId) {
+  const notebook = state.notebooks.find((item) => item.id === notebookId);
+  if (!notebook) return;
+  state.notebookMenuId = null;
+  state.editingNotebookId = notebook.id;
+  openNotebookForm({
+    title: notebook.title || "ノートブック",
+    color: notebookColorKey(notebook),
+    icon: notebook.icon || "book",
+    mode: "edit",
+  });
+}
+
+function openNotebookForm({ title, color, icon, mode }) {
   if (!els.notebookCreateOverlay) {
     createNotebook();
     return;
   }
 
   renderIconChoices();
-  if (els.notebookNameInput) els.notebookNameInput.value = "講義ノート";
-  setCreateChoice(els.notebookColorChoices, "color", "green");
-  setCreateChoice(els.notebookIconChoices, "icon", "book");
+  setNotebookFormMode(mode);
+  if (els.notebookNameInput) els.notebookNameInput.value = title;
+  setCreateChoice(els.notebookColorChoices, "color", color || "green");
+  setCreateChoice(els.notebookIconChoices, "icon", icon || "book");
   updateNotebookCreatePreview();
   els.notebookCreateOverlay.hidden = false;
   document.body.classList.add("is-creating-notebook");
@@ -1474,7 +1501,20 @@ function openNotebookCreate() {
   });
 }
 
+function setNotebookFormMode(mode) {
+  const isEdit = mode === "edit";
+  const title = els.notebookCreateOverlay?.querySelector(".create-page-header h1");
+  const description = els.notebookCreateOverlay?.querySelector(".create-page-header p");
+  const submitButton = els.notebookCreateForm?.querySelector('button[type="submit"]');
+  if (title) title.textContent = isEdit ? "ノートブックを編集" : "新しいノートブック";
+  if (description) description.textContent = isEdit ? "ノートブックの名前や色を変更します。" : "ノートを整理するための新しいノートブックを作成します。";
+  if (submitButton) submitButton.textContent = isEdit ? "保存" : "作成";
+  els.notebookCreateOverlay?.setAttribute("aria-label", isEdit ? "ノートブックを編集" : "新しいノートブック");
+}
+
 function closeNotebookCreate() {
+  state.editingNotebookId = null;
+  setNotebookFormMode("create");
   if (els.notebookCreateOverlay) els.notebookCreateOverlay.hidden = true;
   document.body.classList.remove("is-creating-notebook");
 }
@@ -1498,6 +1538,18 @@ function setCreateChoice(container, key, value) {
   });
 }
 
+
+function updateNotebookDetails(notebookId, details) {
+  const notebook = state.notebooks.find((item) => item.id === notebookId);
+  if (!notebook) return;
+
+  notebook.title = details.title || notebook.title || "ノートブック";
+  notebook.color = details.color || notebook.color || "green";
+  notebook.icon = details.icon || notebook.icon || "book";
+  notebook.updatedAt = Date.now();
+  saveToStorage();
+  renderNotebookPage();
+}
 function selectNotebookColor(event) {
   const button = event.target.closest("button[data-color]");
   if (!button) return;
@@ -3111,6 +3163,11 @@ function renderNotebookItem(notebook) {
   menu.className = "notebook-menu";
   menu.hidden = state.notebookMenuId !== notebook.id;
 
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.className = "notebook-menu-item notebook-edit";
+  editButton.textContent = "編集";
+
   const importantButton = document.createElement("button");
   importantButton.type = "button";
   importantButton.className = "notebook-menu-item notebook-important";
@@ -3121,6 +3178,7 @@ function renderNotebookItem(notebook) {
   deleteButton.className = "notebook-menu-item danger notebook-delete";
   deleteButton.textContent = "削除";
 
+  menu.appendChild(editButton);
   menu.appendChild(importantButton);
   menu.appendChild(deleteButton);
   actions.appendChild(importantMark);
@@ -3157,6 +3215,11 @@ function renderNotebookItem(notebook) {
     event.stopPropagation();
     state.notebookMenuId = state.notebookMenuId === notebook.id ? null : notebook.id;
     renderNotebookPage();
+  });
+
+  editButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openNotebookEdit(notebook.id);
   });
 
   importantButton.addEventListener("click", (event) => {
