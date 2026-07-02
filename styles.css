@@ -1993,7 +1993,41 @@ html[data-page="notes"] .body-field {
   color: var(--accent);
 }
 
+
+.freehand-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid rgba(127, 183, 158, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.38);
+}
+
+.freehand-tool-group[hidden] {
+  display: none;
+}
+
+.freehand-tool-button {
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(82, 75, 66, 0.7);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.freehand-tool-button:hover,
+.freehand-tool-button.is-active,
+.freehand-tool-button[aria-pressed="true"] {
+  border-color: rgba(127, 183, 158, 0.34);
+  background: rgba(127, 183, 158, 0.2);
+  color: var(--accent);
+}
 .freehand-drawing {
+  position: relative;
   display: block;
   width: min(100%, 720px);
   margin: 12px 0 14px;
@@ -2011,6 +2045,20 @@ html[data-page="notes"] .body-field {
   touch-action: none;
 }
 
+
+.freehand-resize-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  background: var(--brand-mint, #7fb79e);
+  box-shadow: 0 4px 10px rgba(35, 28, 18, 0.16);
+  cursor: nwse-resize;
+  touch-action: none;
+}
 .freehand-image img {
   background: transparent;
 }

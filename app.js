@@ -88,6 +88,9 @@ const els = {
   imageInput: document.getElementById("imageInput"),
   freeNoteBtn: document.getElementById("freeNoteBtn"),
   freehandBtn: document.getElementById("freehandBtn"),
+  freehandToolGroup: document.getElementById("freehandToolGroup"),
+  freehandPenBtn: document.getElementById("freehandPenBtn"),
+  freehandEraserBtn: document.getElementById("freehandEraserBtn"),
   toolbarMoreBtn: document.getElementById("toolbarMoreBtn"),
   toolbarMoreMenu: document.getElementById("toolbarMoreMenu"),
   aiFormatBtn: document.getElementById("aiFormatBtn"),
@@ -310,6 +313,8 @@ function wireNotesEvents() {
   document.addEventListener("pointerup", handleImageResizeEnd);
   els.freeNoteBtn?.addEventListener("click", createFreeNoteAtCursor);
   els.freehandBtn?.addEventListener("click", toggleFreehandDrawing);
+  els.freehandPenBtn?.addEventListener("click", () => setFreehandTool("pen"));
+  els.freehandEraserBtn?.addEventListener("click", () => setFreehandTool("eraser"));
   els.toolbarMoreBtn?.addEventListener("click", toggleToolbarMoreMenu);
   els.aiFormatBtn?.addEventListener("click", () => {
     closeToolbarMoreMenu();
@@ -2315,7 +2320,10 @@ function startFreehandDrawing() {
   context.lineWidth = 2.4;
   context.strokeStyle = currentFreehandColor();
 
-  wrapper.appendChild(canvas);
+  const resizeHandle = document.createElement("span");
+  resizeHandle.className = "freehand-resize-handle";
+  resizeHandle.setAttribute("aria-hidden", "true");
+  wrapper.append(canvas, resizeHandle);
   insertInlineEditorNode(wrapper);
 
   state.freehand = {
@@ -2327,13 +2335,17 @@ function startFreehandDrawing() {
     maxY: 0,
     width,
     height,
+    tool: "pen",
+    resizing: false,
   };
   setFreehandButtonActive(true);
+  updateFreehandToolButtons();
   canvas.focus?.();
   canvas.addEventListener("pointerdown", startFreehandStroke);
   canvas.addEventListener("pointermove", moveFreehandStroke);
   canvas.addEventListener("pointerup", endFreehandStroke);
   canvas.addEventListener("pointercancel", endFreehandStroke);
+  resizeHandle.addEventListener("pointerdown", startFreehandResize);
 }
 
 function startFreehandStroke(event) {
@@ -2342,6 +2354,7 @@ function startFreehandStroke(event) {
   state.freehand.drawing = true;
   state.freehand.canvas.setPointerCapture?.(event.pointerId);
   const point = freehandPoint(event);
+  applyFreehandToolStyle();
   state.freehand.context.beginPath();
   state.freehand.context.moveTo(point.x, point.y);
   state.freehand.maxY = Math.max(state.freehand.maxY, point.y);
@@ -2363,6 +2376,58 @@ function endFreehandStroke(event) {
   state.freehand.canvas.releasePointerCapture?.(event.pointerId);
 }
 
+
+function startFreehandResize(event) {
+  if (!state.freehand) return;
+  event.preventDefault();
+  event.stopPropagation();
+  state.freehand.resizing = true;
+  state.freehand.resizeStartX = event.clientX;
+  state.freehand.resizeStartY = event.clientY;
+  state.freehand.resizeStartWidth = state.freehand.width;
+  state.freehand.resizeStartHeight = state.freehand.height;
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+  document.addEventListener("pointermove", moveFreehandResize);
+  document.addEventListener("pointerup", endFreehandResize, { once: true });
+}
+
+function moveFreehandResize(event) {
+  if (!state.freehand?.resizing) return;
+  event.preventDefault();
+  const maxWidth = Math.max(320, els.bodyInput.clientWidth - 72);
+  const nextWidth = Math.max(320, Math.min(maxWidth, state.freehand.resizeStartWidth + event.clientX - state.freehand.resizeStartX));
+  const nextHeight = Math.max(120, Math.min(520, state.freehand.resizeStartHeight + event.clientY - state.freehand.resizeStartY));
+  resizeFreehandCanvas(nextWidth, nextHeight);
+}
+
+function endFreehandResize() {
+  if (!state.freehand) return;
+  state.freehand.resizing = false;
+  document.removeEventListener("pointermove", moveFreehandResize);
+}
+
+function resizeFreehandCanvas(width, height) {
+  const drawing = state.freehand;
+  const snapshot = document.createElement("canvas");
+  snapshot.width = drawing.canvas.width;
+  snapshot.height = drawing.canvas.height;
+  snapshot.getContext("2d").drawImage(drawing.canvas, 0, 0);
+
+  drawing.width = Math.round(width);
+  drawing.height = Math.round(height);
+  drawing.canvas.width = drawing.width * window.devicePixelRatio;
+  drawing.canvas.height = drawing.height * window.devicePixelRatio;
+  drawing.canvas.style.width = `${drawing.width}px`;
+  drawing.canvas.style.height = `${drawing.height}px`;
+
+  drawing.context = drawing.canvas.getContext("2d");
+  drawing.context.scale(window.devicePixelRatio, window.devicePixelRatio);
+  drawing.context.drawImage(snapshot, 0, 0, snapshot.width / window.devicePixelRatio, snapshot.height / window.devicePixelRatio);
+  drawing.context.lineCap = "round";
+  drawing.context.lineJoin = "round";
+  drawing.context.lineWidth = 2.4;
+  applyFreehandToolStyle();
+}
 function handleFreehandKey(event) {
   if (!state.freehand || event.key !== "Enter" || event.shiftKey) return;
   event.preventDefault();
@@ -2382,6 +2447,7 @@ function finishFreehandDrawing() {
   const drawing = state.freehand;
   state.freehand = null;
   setFreehandButtonActive(false);
+  updateFreehandToolButtons();
 
   if (!drawing.hasInk) {
     const spacer = createImageSpacer();
@@ -2419,6 +2485,37 @@ function finishFreehandDrawing() {
   saveToStorage();
 }
 
+
+function setFreehandTool(tool) {
+  if (!state.freehand) return;
+  state.freehand.tool = tool === "eraser" ? "eraser" : "pen";
+  applyFreehandToolStyle();
+  updateFreehandToolButtons();
+  state.freehand.canvas.focus?.();
+}
+
+function applyFreehandToolStyle() {
+  if (!state.freehand) return;
+  const context = state.freehand.context;
+  if (state.freehand.tool === "eraser") {
+    context.globalCompositeOperation = "destination-out";
+    context.lineWidth = 14;
+    context.strokeStyle = "rgba(0, 0, 0, 1)";
+  } else {
+    context.globalCompositeOperation = "source-over";
+    context.lineWidth = 2.4;
+    context.strokeStyle = currentFreehandColor();
+  }
+}
+
+function updateFreehandToolButtons() {
+  const tool = state.freehand?.tool || "pen";
+  if (els.freehandToolGroup) els.freehandToolGroup.hidden = !state.freehand;
+  els.freehandPenBtn?.classList.toggle("is-active", tool === "pen");
+  els.freehandEraserBtn?.classList.toggle("is-active", tool === "eraser");
+  els.freehandPenBtn?.setAttribute("aria-pressed", String(tool === "pen"));
+  els.freehandEraserBtn?.setAttribute("aria-pressed", String(tool === "eraser"));
+}
 function currentFreehandColor() {
   const color = normalizeColorValue(document.queryCommandValue("foreColor"));
   return color || "#22201b";

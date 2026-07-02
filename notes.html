@@ -84,6 +84,10 @@
           <input id="imageInput" class="visually-hidden" type="file" accept="image/*" />
           <button id="freeNoteBtn" class="free-note-button" type="button">メモ</button>
           <button id="freehandBtn" class="freehand-button" type="button" aria-pressed="false">フリー</button>
+          <span id="freehandToolGroup" class="freehand-tool-group" hidden>
+            <button id="freehandPenBtn" class="freehand-tool-button is-active" type="button" aria-label="ペン" aria-pressed="true">ペン</button>
+            <button id="freehandEraserBtn" class="freehand-tool-button" type="button" aria-label="消しゴム" aria-pressed="false">消しゴム</button>
+          </span>
           <span id="aiFormatStatus" class="ai-format-status" aria-live="polite"></span>
           <div class="toolbar-more">
             <button id="toolbarMoreBtn" class="toolbar-more-button" type="button" aria-label="その他のツール" aria-expanded="false">↑</button>
