@@ -38,6 +38,7 @@ state.recentLimit = RECENT_INITIAL_LIMIT;
 state.pageInitialized = false;
 state.notebookMenuId = null;
 state.imageResize = null;
+state.freehand = null;
 state.toolbarMoreOpen = false;
 state.pasteRichOnce = false;
 state.savedEditorRange = null;
@@ -86,6 +87,7 @@ const els = {
   richPasteBtn: document.getElementById("richPasteBtn"),
   imageInput: document.getElementById("imageInput"),
   freeNoteBtn: document.getElementById("freeNoteBtn"),
+  freehandBtn: document.getElementById("freehandBtn"),
   toolbarMoreBtn: document.getElementById("toolbarMoreBtn"),
   toolbarMoreMenu: document.getElementById("toolbarMoreMenu"),
   aiFormatBtn: document.getElementById("aiFormatBtn"),
@@ -307,6 +309,7 @@ function wireNotesEvents() {
   document.addEventListener("pointermove", handleImageResizeMove);
   document.addEventListener("pointerup", handleImageResizeEnd);
   els.freeNoteBtn?.addEventListener("click", createFreeNoteAtCursor);
+  els.freehandBtn?.addEventListener("click", toggleFreehandDrawing);
   els.toolbarMoreBtn?.addEventListener("click", toggleToolbarMoreMenu);
   els.aiFormatBtn?.addEventListener("click", () => {
     closeToolbarMoreMenu();
@@ -315,6 +318,7 @@ function wireNotesEvents() {
   els.textColorChoices?.addEventListener("click", handleTextColorChoice);
   els.form?.addEventListener("keydown", handleShortcuts);
   document.addEventListener("keydown", handleGlobalKeys);
+  document.addEventListener("keydown", handleFreehandKey);
   document.addEventListener("click", handleOutsideMenuClick);
   document.addEventListener("click", handleOutsideToolbarMoreClick);
   window.addEventListener("beforeunload", saveBeforeUnload);
@@ -2204,6 +2208,14 @@ function resizeImageDataUrl(dataUrl, resolve, reject) {
 
 function insertImageAtSelection(dataUrl, altText = "image") {
   els.bodyInput.focus();
+  const figure = createImageFigure(dataUrl, altText);
+  insertNodeAtEditorSelection(figure);
+  updateCurrentNoteFromEditor();
+  saveToStorage();
+}
+
+
+function createImageFigure(dataUrl, altText = "image") {
   const figure = document.createElement("figure");
   figure.className = "note-image";
   figure.contentEditable = "false";
@@ -2215,11 +2227,8 @@ function insertImageAtSelection(dataUrl, altText = "image") {
 
   figure.appendChild(image);
   ensureImageResizeHandle(figure);
-  insertNodeAtEditorSelection(figure);
-  updateCurrentNoteFromEditor();
-  saveToStorage();
+  return figure;
 }
-
 function prepareEditorImages() {
   if (!els.bodyInput) return;
   els.bodyInput.querySelectorAll(".note-image").forEach((figure) => {
@@ -2273,6 +2282,175 @@ function getCurrentEditorLineTop() {
   return Math.round(top);
 }
 
+function toggleFreehandDrawing() {
+  if (state.freehand) {
+    finishFreehandDrawing();
+    return;
+  }
+  startFreehandDrawing();
+}
+
+function startFreehandDrawing() {
+  if (!els.bodyInput || els.bodyInput.getAttribute("aria-disabled") === "true") return;
+  restoreEditorSelection();
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "freehand-drawing";
+  wrapper.contentEditable = "false";
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "freehand-canvas";
+  const width = Math.max(320, Math.min(720, els.bodyInput.clientWidth - 72));
+  const height = 180;
+  canvas.tabIndex = 0;
+  canvas.width = width * window.devicePixelRatio;
+  canvas.height = height * window.devicePixelRatio;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  const context = canvas.getContext("2d");
+  context.scale(window.devicePixelRatio, window.devicePixelRatio);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = 2.4;
+  context.strokeStyle = currentFreehandColor();
+
+  wrapper.appendChild(canvas);
+  insertInlineEditorNode(wrapper);
+
+  state.freehand = {
+    wrapper,
+    canvas,
+    context,
+    drawing: false,
+    hasInk: false,
+    maxY: 0,
+    width,
+    height,
+  };
+  setFreehandButtonActive(true);
+  canvas.focus?.();
+  canvas.addEventListener("pointerdown", startFreehandStroke);
+  canvas.addEventListener("pointermove", moveFreehandStroke);
+  canvas.addEventListener("pointerup", endFreehandStroke);
+  canvas.addEventListener("pointercancel", endFreehandStroke);
+}
+
+function startFreehandStroke(event) {
+  if (!state.freehand) return;
+  event.preventDefault();
+  state.freehand.drawing = true;
+  state.freehand.canvas.setPointerCapture?.(event.pointerId);
+  const point = freehandPoint(event);
+  state.freehand.context.beginPath();
+  state.freehand.context.moveTo(point.x, point.y);
+  state.freehand.maxY = Math.max(state.freehand.maxY, point.y);
+}
+
+function moveFreehandStroke(event) {
+  if (!state.freehand?.drawing) return;
+  event.preventDefault();
+  const point = freehandPoint(event);
+  state.freehand.context.lineTo(point.x, point.y);
+  state.freehand.context.stroke();
+  state.freehand.hasInk = true;
+  state.freehand.maxY = Math.max(state.freehand.maxY, point.y);
+}
+
+function endFreehandStroke(event) {
+  if (!state.freehand) return;
+  state.freehand.drawing = false;
+  state.freehand.canvas.releasePointerCapture?.(event.pointerId);
+}
+
+function handleFreehandKey(event) {
+  if (!state.freehand || event.key !== "Enter" || event.shiftKey) return;
+  event.preventDefault();
+  finishFreehandDrawing();
+}
+
+function freehandPoint(event) {
+  const rect = state.freehand.canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+  };
+}
+
+function finishFreehandDrawing() {
+  if (!state.freehand) return;
+  const drawing = state.freehand;
+  state.freehand = null;
+  setFreehandButtonActive(false);
+
+  if (!drawing.hasInk) {
+    const spacer = createImageSpacer();
+    drawing.wrapper.replaceWith(spacer);
+    placeCaretAtNodeStart(spacer);
+    updateCurrentNoteFromEditor({ render: false });
+    saveToStorage();
+    return;
+  }
+
+  const contentHeight = Math.min(drawing.height, Math.max(56, Math.ceil(drawing.maxY + 18)));
+  const cropped = document.createElement("canvas");
+  cropped.width = drawing.width * window.devicePixelRatio;
+  cropped.height = contentHeight * window.devicePixelRatio;
+  const croppedContext = cropped.getContext("2d");
+  croppedContext.drawImage(
+    drawing.canvas,
+    0,
+    0,
+    cropped.width,
+    cropped.height,
+    0,
+    0,
+    cropped.width,
+    cropped.height,
+  );
+
+  const figure = createImageFigure(cropped.toDataURL("image/png"), "freehand");
+  figure.classList.add("freehand-image");
+  figure.style.width = `${drawing.width}px`;
+  const spacer = createImageSpacer();
+  drawing.wrapper.replaceWith(figure, spacer);
+  placeCaretAtNodeStart(spacer);
+  updateCurrentNoteFromEditor({ render: false });
+  saveToStorage();
+}
+
+function currentFreehandColor() {
+  const color = normalizeColorValue(document.queryCommandValue("foreColor"));
+  return color || "#22201b";
+}
+
+function setFreehandButtonActive(active) {
+  if (!els.freehandBtn) return;
+  els.freehandBtn.classList.toggle("is-active", active);
+  els.freehandBtn.setAttribute("aria-pressed", String(active));
+}
+
+function insertInlineEditorNode(node) {
+  els.bodyInput.focus();
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount || !els.bodyInput.contains(selection.anchorNode)) {
+    els.bodyInput.appendChild(node);
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  range.insertNode(node);
+}
+
+function placeCaretAtNodeStart(node) {
+  const range = document.createRange();
+  range.setStart(node, 0);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  els.bodyInput?.focus();
+}
 function focusFreeNote(freeNote) {
   window.requestAnimationFrame(() => {
     freeNote.focus();
