@@ -2,6 +2,7 @@
 const AUTH_USERS_KEY = "lecture-notes-users";
 const AUTH_SESSION_KEY = "lecture-notes-session";
 const AUTH_PROVIDER_KEY = "lecture-notes-auth-provider";
+const THEME_STORAGE_KEY = "lecture-notes-theme";
 const MICROSOFT_AUTH_VERIFIER_KEY = "lecture-notes-ms-verifier";
 const MICROSOFT_AUTH_STATE_KEY = "lecture-notes-ms-state";
 const MICROSOFT_TOKEN_KEY = "lecture-notes-ms-token";
@@ -61,6 +62,7 @@ const els = {
   notebookList: document.getElementById("notebookList"),
   notebookItemTemplate: document.getElementById("notebookItemTemplate"),
   notebookSearchInput: document.getElementById("notebookSearchInput"),
+  themeToggleBtn: document.getElementById("themeToggleBtn"),
   showMoreNotebooksBtn: document.getElementById("showMoreNotebooksBtn"),
   recentNoteList: document.getElementById("recentNoteList"),
   recentNoteTemplate: document.getElementById("recentNoteTemplate"),
@@ -110,6 +112,8 @@ const els = {
   switchAccountBtn: document.getElementById("switchAccountBtn"),
 };
 
+applySavedTheme();
+wireThemeEvents();
 wireAuthEvents();
 initializeMicrosoftAuth();
 
@@ -159,6 +163,46 @@ function setupNotesPage() {
   renderNotesPage();
 }
 
+function loadSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+function saveTheme(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Theme persistence is best-effort when localStorage is blocked.
+  }
+}
+
+function applyTheme(theme) {
+  const nextTheme = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = nextTheme;
+  if (els.themeToggleBtn) {
+    const isDark = nextTheme === "dark";
+    els.themeToggleBtn.setAttribute("aria-pressed", String(isDark));
+    els.themeToggleBtn.setAttribute("aria-label", isDark ? "ライトモードに切り替え" : "ダークモードに切り替え");
+    const icon = els.themeToggleBtn.querySelector(".theme-toggle-icon");
+    if (icon) icon.textContent = isDark ? "☀" : "☾";
+  }
+}
+
+function applySavedTheme() {
+  applyTheme(loadSavedTheme());
+}
+
+function wireThemeEvents() {
+  els.themeToggleBtn?.addEventListener("click", () => {
+    const currentTheme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    const nextTheme = currentTheme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+    saveTheme(nextTheme);
+  });
+}
 function wireAuthEvents() {
   els.authForm?.addEventListener("submit", (event) => {
     event.preventDefault();

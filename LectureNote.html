@@ -54,10 +54,15 @@
 
       <main class="notebooks-main">
         <header class="notebooks-header">
-          <label class="search-shell" for="notebookSearchInput">
+          <div class="notebooks-header-search">
+            <label class="search-shell" for="notebookSearchInput">
             <span class="search-icon">⌕</span>
             <input id="notebookSearchInput" type="search" placeholder="ノートブックを検索..." autocomplete="off" />
           </label>
+            <button id="themeToggleBtn" class="theme-toggle-button" type="button" aria-label="ダークモードに切り替え" aria-pressed="false">
+              <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+            </button>
+          </div>
 
           <div class="header-actions">
             <button id="newNotebookBtn" class="primary-button header-button" type="button">＋ 新規ノートブック</button>
