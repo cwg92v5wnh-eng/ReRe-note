@@ -253,7 +253,7 @@ async function initializeMicrosoftAuth() {
       if (readMicrosoftToken()) {
         syncOneDrive({ preferCloud: true });
       } else {
-        setOneDriveStatus("再ログインが必要です", true);
+        requireMicrosoftRelogin();
       }
     }
   } catch {
@@ -610,6 +610,15 @@ function closeAccountMenu() {
   els.accountMenuBtn?.setAttribute("aria-expanded", "false");
 }
 
+function requireMicrosoftRelogin(message = "再ログインが必要です") {
+  window.clearTimeout(state.oneDriveSaveTimer);
+  closeAccountMenu();
+  clearActiveUser();
+  clearMicrosoftToken();
+  closeMenu();
+  setOneDriveStatus(message, true);
+  renderAuthState(message);
+}
 async function switchMicrosoftAccount() {
   closeAccountMenu();
   clearActiveUser();
@@ -1093,7 +1102,11 @@ function saveToStorage() {
 }
 
 function scheduleOneDriveSave() {
-  if (state.applyingOneDriveState || loadAuthProvider() !== "microsoft" || !readMicrosoftToken()) return;
+  if (state.applyingOneDriveState || loadAuthProvider() !== "microsoft") return;
+  if (!readMicrosoftToken()) {
+    requireMicrosoftRelogin();
+    return;
+  }
   window.clearTimeout(state.oneDriveSaveTimer);
   setOneDriveStatus("保存待ち");
   state.oneDriveSaveTimer = window.setTimeout(() => {
@@ -1105,7 +1118,7 @@ async function syncOneDrive({ preferCloud = false } = {}) {
   if (state.oneDriveSyncing || loadAuthProvider() !== "microsoft") return;
   const token = readMicrosoftToken();
   if (!token) {
-    setOneDriveStatus("再ログインが必要です", true);
+    requireMicrosoftRelogin();
     return;
   }
 
@@ -1126,7 +1139,7 @@ async function syncOneDrive({ preferCloud = false } = {}) {
     }
   } catch (error) {
     console.warn("OneDrive sync error:", error);
-    setOneDriveStatus(oneDriveErrorMessage(error), true);
+    handleOneDriveFailure(error);
   } finally {
     state.oneDriveSyncing = false;
     setOneDriveBusy(false);
@@ -1149,7 +1162,7 @@ async function downloadStateFromOneDrive(accessToken) {
 
 async function uploadStateToOneDrive(accessToken = readMicrosoftToken()?.accessToken, options = {}) {
   if (!accessToken) {
-    setOneDriveStatus("再ログインが必要です", true);
+    requireMicrosoftRelogin();
     return;
   }
 
@@ -1170,7 +1183,7 @@ async function uploadStateToOneDrive(accessToken = readMicrosoftToken()?.accessT
     setOneDriveStatus("OneDriveに保存済み");
   } catch (error) {
     console.warn("OneDrive save error:", error);
-    setOneDriveStatus(oneDriveErrorMessage(error), true);
+    handleOneDriveFailure(error);
   } finally {
     if (manageBusyState) setOneDriveBusy(false);
   }
@@ -1256,6 +1269,15 @@ async function createOneDriveError(response) {
   return error;
 }
 
+
+function handleOneDriveFailure(error) {
+  const message = oneDriveErrorMessage(error);
+  if (message === "再ログインが必要です") {
+    requireMicrosoftRelogin(message);
+    return;
+  }
+  setOneDriveStatus(message, true);
+}
 function oneDriveErrorMessage(error) {
   if (error?.status === 401) return "再ログインが必要です";
   if (error?.status === 403) return "OneDriveの保存権限がありません";
