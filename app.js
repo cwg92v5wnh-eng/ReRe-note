@@ -106,6 +106,7 @@ const els = {
   microsoftLoginBtn: document.getElementById("microsoftLoginBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
   currentUserLabel: document.getElementById("currentUserLabel"),
+  oneDriveStatusLabel: document.getElementById("oneDriveStatusLabel"),
   accountMenuBtn: document.getElementById("accountMenuBtn"),
   accountOverlay: document.getElementById("accountOverlay"),
   accountDialogTitle: document.getElementById("accountDialogTitle"),
@@ -586,6 +587,7 @@ function userStorageKey() {
 function renderAuthState(message = "") {
   document.body.classList.toggle("is-authenticated", Boolean(activeUser));
   if (els.currentUserLabel) els.currentUserLabel.textContent = activeUser || "";
+  updateOneDriveStatusLabel();
   if (els.accountDialogTitle) els.accountDialogTitle.textContent = activeUser || "";
   if (els.authMessage) els.authMessage.textContent = message;
   if (els.authEmailInput && activeUser) els.authEmailInput.value = activeUser;
@@ -1257,11 +1259,29 @@ function oneDriveErrorMessage(error) {
 }
 
 function setOneDriveBusy(isBusy, message = "") {
+  document.body.classList.toggle("is-onedrive-busy", Boolean(isBusy));
   if (message) setOneDriveStatus(message);
 }
 
 function setOneDriveStatus(message, isError = false) {
-  document.body.dataset.oneDriveStatus = isError ? "error" : message;
+  document.body.dataset.oneDriveStatus = message || "";
+  document.body.dataset.oneDriveStatusKind = isError ? "error" : "normal";
+  updateOneDriveStatusLabel();
+}
+
+function updateOneDriveStatusLabel() {
+  if (!els.oneDriveStatusLabel) return;
+  if (!activeUser) {
+    els.oneDriveStatusLabel.textContent = "";
+    els.oneDriveStatusLabel.dataset.kind = "normal";
+    return;
+  }
+
+  const usesMicrosoft = loadAuthProvider() === "microsoft";
+  const message = document.body.dataset.oneDriveStatus || (usesMicrosoft ? "同期確認中" : "OneDrive未接続");
+  const isError = document.body.dataset.oneDriveStatusKind === "error";
+  els.oneDriveStatusLabel.textContent = message;
+  els.oneDriveStatusLabel.dataset.kind = isError ? "error" : "normal";
 }
 
 function readStoredState() {

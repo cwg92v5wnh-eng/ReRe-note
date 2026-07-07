@@ -678,6 +678,46 @@ html[data-page="notebooks"] .notebooks-shell::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sync-status {
+  position: relative;
+  margin: 1px 0 0;
+  padding-left: 13px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-status::before {
+  content: "";
+  position: absolute;
+  top: 0.58em;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  opacity: 0.78;
+}
+
+.sync-status[data-kind="error"] {
+  color: var(--danger);
+}
+
+.sync-status[data-kind="error"]::before {
+  background: var(--danger);
+}
+
+body.is-onedrive-busy .sync-status::before {
+  animation: syncPulse 1s ease-in-out infinite;
+}
+
+@keyframes syncPulse {
+  0%, 100% { opacity: 0.42; transform: scale(0.88); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
 
 .account-menu-button:hover,
 .account-menu-button[aria-expanded="true"] {
