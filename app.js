@@ -249,8 +249,12 @@ async function initializeMicrosoftAuth() {
 
     els.microsoftLoginBtn.disabled = false;
     els.microsoftLoginBtn.textContent = "Microsoftでログイン";
-    if (activeUser && loadAuthProvider() === "microsoft" && readMicrosoftToken()) {
-      syncOneDrive({ preferCloud: true });
+    if (activeUser && loadAuthProvider() === "microsoft") {
+      if (readMicrosoftToken()) {
+        syncOneDrive({ preferCloud: true });
+      } else {
+        setOneDriveStatus("再ログインが必要です", true);
+      }
     }
   } catch {
     setMicrosoftLoginUnavailable("Microsoftログインを読み込めませんでした。");
@@ -1278,8 +1282,12 @@ function updateOneDriveStatusLabel() {
   }
 
   const usesMicrosoft = loadAuthProvider() === "microsoft";
-  const message = document.body.dataset.oneDriveStatus || (usesMicrosoft ? "同期確認中" : "OneDrive未接続");
-  const isError = document.body.dataset.oneDriveStatusKind === "error";
+  const hasToken = Boolean(readMicrosoftToken());
+  const fallbackMessage = usesMicrosoft
+    ? hasToken ? "同期確認中" : "再ログインが必要です"
+    : "OneDrive未接続";
+  const message = document.body.dataset.oneDriveStatus || fallbackMessage;
+  const isError = document.body.dataset.oneDriveStatusKind === "error" || (usesMicrosoft && !hasToken);
   els.oneDriveStatusLabel.textContent = message;
   els.oneDriveStatusLabel.dataset.kind = isError ? "error" : "normal";
 }
