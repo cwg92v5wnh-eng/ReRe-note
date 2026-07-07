@@ -1967,21 +1967,6 @@ body.is-resizing-image * {
   line-height: 1.82;
 }
 
-
-html[data-page="notes"] .body-input::after {
-  content: "";
-  position: absolute;
-  top: 18px;
-  bottom: 18px;
-  right: 25%;
-  width: 0;
-  border-left: 1px dashed rgba(111, 103, 93, 0.28);
-  pointer-events: none;
-}
-
-:root[data-theme="dark"] html[data-page="notes"] .body-input::after {
-  border-left-color: rgba(185, 176, 164, 0.26);
-}
 html[data-page="notes"] .body-input {
   border: 0;
   border-radius: 0;
@@ -2728,9 +2713,6 @@ html[data-page="notes"] .body-field {
 }
 
 @media (max-width: 900px) {
-  html[data-page="notes"] .body-input::after {
-    display: none;
-  }
 
   .body-input,
   html[data-page="notes"] .body-input {
