@@ -1868,31 +1868,85 @@ html[data-page="notes"] .editor-form {
   top: -0.95em;
 }
 
-.free-note {
-  position: absolute;
-  right: 24px;
-  width: calc(25% - 34px);
-  min-height: 2.4em;
-  padding: 4px 2px;
-  outline: 0;
-  color: rgba(89, 78, 58, 0.78);
-  font-family: "UD Digi Kyokasho N-R", "UD Digi Kyokasho NP-R", "Yu Mincho", "YuMincho", "HGS教科書体", "Comic Sans MS", "Segoe Print", cursive;
-  font-size: 0.95rem;
-  line-height: 1.48;
-  letter-spacing: 0.01em;
-  white-space: pre-wrap;
+.editor-canvas {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
 }
 
-.free-note:empty::before {
-  content: attr(data-placeholder);
-  color: rgba(111, 103, 93, 0.44);
+.memo-layer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 25%;
+  min-height: 100%;
   pointer-events: none;
 }
 
-.free-note:focus {
-  color: rgba(82, 63, 31, 0.92);
-  background: rgba(255, 246, 199, 0.22);
+.memo-card {
+  position: absolute;
+  left: 10px;
+  right: 22px;
+  min-height: 42px;
+  padding: 5px 24px 5px 9px;
+  border: 1px solid transparent;
   border-radius: 10px;
+  background: transparent;
+  pointer-events: auto;
+  transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.memo-card:hover,
+.memo-card:focus-within {
+  border-color: rgba(205, 173, 88, 0.24);
+  background: rgba(255, 246, 199, 0.2);
+  box-shadow: 0 7px 18px rgba(67, 54, 30, 0.04);
+}
+
+.memo-input {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  resize: none;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  color: rgba(89, 78, 58, 0.82);
+  font-family: "UD Digi Kyokasho N-R", "UD Digi Kyokasho NP-R", "Yu Mincho", "YuMincho", "HGS教科書体", "Comic Sans MS", "Segoe Print", cursive;
+  font-size: 0.94rem;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.memo-input::placeholder {
+  color: rgba(111, 103, 93, 0.4);
+}
+
+.memo-remove-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(111, 103, 93, 0.44);
+  font-size: 0.9rem;
+  line-height: 1;
+  opacity: 0;
+}
+
+.memo-card:hover .memo-remove-button,
+.memo-card:focus-within .memo-remove-button {
+  opacity: 1;
+}
+
+.memo-remove-button:hover,
+.memo-remove-button:focus-visible {
+  background: rgba(156, 74, 60, 0.1);
+  color: var(--danger);
 }
 
 .rich-body-input [data-size="1"] {
@@ -1968,11 +2022,15 @@ body.is-resizing-image * {
 }
 
 html[data-page="notes"] .body-input {
+  width: 75%;
+  height: auto;
+  min-height: 100%;
+  overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  padding: 24px calc(25% + 38px) 18px 28px;
+  padding: 24px 28px 18px;
 }
 
 html[data-page="notes"] .body-input:focus {
@@ -1995,6 +2053,9 @@ html[data-page="notes"] .body-input:focus {
 
 html[data-page="notes"] .body-field {
   margin-bottom: 0;
+  overflow-y: auto;
+  scrollbar-color: rgba(66, 90, 74, 0.24) transparent;
+  scrollbar-width: thin;
 }
 
 .under-toolbar {
@@ -2716,15 +2777,22 @@ html[data-page="notes"] .body-field {
 
   .body-input,
   html[data-page="notes"] .body-input {
+    width: 100%;
     padding-right: 28px;
   }
 
-  .free-note {
+  .memo-layer {
     position: relative;
-    right: auto;
-    top: auto !important;
     width: 100%;
-    margin: 10px 0;
+    padding: 8px 18px 20px 28px;
+  }
+
+  .memo-card {
+    position: relative;
+    top: auto !important;
+    right: auto;
+    left: auto;
+    margin: 8px 0;
   }
 }
 

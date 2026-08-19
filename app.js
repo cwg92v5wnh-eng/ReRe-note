@@ -6,7 +6,7 @@ const THEME_STORAGE_KEY = "lecture-notes-theme";
 const MICROSOFT_AUTH_VERIFIER_KEY = "lecture-notes-ms-verifier";
 const MICROSOFT_AUTH_STATE_KEY = "lecture-notes-ms-state";
 const MICROSOFT_TOKEN_KEY = "lecture-notes-ms-token";
-const MICROSOFT_GRAPH_SCOPES = ["User.Read", "Files.ReadWrite.AppFolder"];
+const MICROSOFT_GRAPH_SCOPES = ["User.Read", "Files.ReadWrite.AppFolder", "offline_access"];
 const ONEDRIVE_STATE_FILE = "lecture-note-data.json";
 const AUTOSAVE_DELAY = 180;
 const ONEDRIVE_SAVE_DELAY = 1200;
@@ -77,7 +77,9 @@ const els = {
   dateLabel: document.getElementById("dateLabel"),
   deleteNoteBtn: document.getElementById("deleteNoteBtn"),
   form: document.getElementById("noteForm"),
+  editorCanvas: document.getElementById("editorCanvas"),
   bodyInput: document.getElementById("bodyInput"),
+  memoLayer: document.getElementById("memoLayer"),
   sizeOneBtn: document.getElementById("sizeOneBtn"),
   sizeTwoBtn: document.getElementById("sizeTwoBtn"),
   sizeThreeBtn: document.getElementById("sizeThreeBtn"),
@@ -250,7 +252,7 @@ async function initializeMicrosoftAuth() {
     els.microsoftLoginBtn.disabled = false;
     els.microsoftLoginBtn.textContent = "Microsoftでログイン";
     if (activeUser && loadAuthProvider() === "microsoft") {
-      if (readMicrosoftToken()) {
+      if (hasMicrosoftConnection()) {
         syncOneDrive({ preferCloud: true });
       } else {
         requireMicrosoftRelogin();
@@ -323,6 +325,7 @@ function wireNotesEvents() {
     scheduleSave();
     saveEditorSelection();
     updateFormattingActiveState();
+    scheduleMemoPositionUpdate();
   });
   els.bodyInput?.addEventListener("keyup", () => {
     saveEditorSelection();
@@ -361,6 +364,7 @@ function wireNotesEvents() {
   els.bodyInput?.addEventListener("pointerdown", handleImageResizeStart);
   document.addEventListener("pointermove", handleImageResizeMove);
   document.addEventListener("pointerup", handleImageResizeEnd);
+  els.freeNoteBtn?.addEventListener("pointerdown", preventToolbarFocusLoss);
   els.freeNoteBtn?.addEventListener("click", createFreeNoteAtCursor);
   els.freehandBtn?.addEventListener("click", toggleFreehandDrawing);
   els.freehandPenBtn?.addEventListener("click", () => setFreehandTool("pen"));
@@ -376,11 +380,13 @@ function wireNotesEvents() {
   document.addEventListener("keydown", handleFreehandKey);
   document.addEventListener("click", handleOutsideMenuClick);
   document.addEventListener("click", handleOutsideToolbarMoreClick);
+  window.addEventListener("resize", scheduleMemoPositionUpdate);
   window.addEventListener("beforeunload", saveBeforeUnload);
 }
 
 function handleShortcuts(event) {
   if (!(event.ctrlKey || event.metaKey)) return;
+  if (event.target.closest?.(".memo-input")) return;
   const key = event.key.toLowerCase();
   if (key === "," || key === "<") {
     event.preventDefault();
@@ -785,6 +791,59 @@ async function exchangeMicrosoftCode(code, verifier) {
   return payload;
 }
 
+async function getMicrosoftAccessToken({ forceRefresh = false } = {}) {
+  const token = readStoredMicrosoftToken();
+  if (!forceRefresh && token?.accessToken && Number(token.expiresAt) > Date.now() + 60000) {
+    return token.accessToken;
+  }
+  if (!token?.refreshToken) {
+    throw microsoftReconnectError();
+  }
+  const refreshedToken = await refreshMicrosoftToken(token.refreshToken);
+  saveMicrosoftToken(refreshedToken, token);
+  return readMicrosoftToken()?.accessToken || refreshedToken.access_token;
+}
+
+async function refreshMicrosoftToken(refreshToken) {
+  const response = await fetch(`${microsoftAuthorityBaseUrl()}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: microsoftClientId,
+      scope: MICROSOFT_GRAPH_SCOPES.join(" "),
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error_description || payload.error || "token_refresh_failed");
+    error.status = 401;
+    throw error;
+  }
+  return payload;
+}
+
+function microsoftReconnectError() {
+  const error = new Error("再ログインが必要です");
+  error.status = 401;
+  return error;
+}
+
+async function graphFetch(url, options = {}, retry = true) {
+  const accessToken = await getMicrosoftAccessToken({ forceRefresh: !retry });
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (response.status === 401 && retry) {
+    return graphFetch(url, options, false);
+  }
+  return response;
+}
 function microsoftAuthorityBaseUrl() {
   return `https://login.microsoftonline.com/${encodeURIComponent(microsoftTenantId)}`;
 }
@@ -848,26 +907,36 @@ function microsoftRedirectUri() {
   return `${window.location.origin}/auth-callback.html`;
 }
 
-function saveMicrosoftToken(token) {
+function saveMicrosoftToken(token, previousToken = readStoredMicrosoftToken()) {
   try {
     sessionStorage.setItem(MICROSOFT_TOKEN_KEY, JSON.stringify({
-      accessToken: token.access_token || "",
-      expiresAt: Date.now() + Number(token.expires_in || 0) * 1000,
-      scope: token.scope || "",
+      accessToken: token.access_token || token.accessToken || "",
+      refreshToken: token.refresh_token || token.refreshToken || previousToken?.refreshToken || "",
+      expiresAt: Date.now() + Number(token.expires_in || token.expiresIn || 0) * 1000,
+      scope: token.scope || previousToken?.scope || "",
     }));
   } catch {
     // Microsoft login can still be used for the current page session.
   }
 }
 
-function readMicrosoftToken() {
+function readStoredMicrosoftToken() {
   try {
-    const token = JSON.parse(sessionStorage.getItem(MICROSOFT_TOKEN_KEY) || "null");
-    if (!token?.accessToken || Number(token.expiresAt) <= Date.now() + 30000) return null;
-    return token;
+    return JSON.parse(sessionStorage.getItem(MICROSOFT_TOKEN_KEY) || "null");
   } catch {
     return null;
   }
+}
+
+function readMicrosoftToken() {
+  const token = readStoredMicrosoftToken();
+  if (!token?.accessToken || Number(token.expiresAt) <= Date.now() + 30000) return null;
+  return token;
+}
+
+function hasMicrosoftConnection() {
+  const token = readStoredMicrosoftToken();
+  return Boolean(token?.accessToken || token?.refreshToken);
 }
 
 function clearMicrosoftToken() {
@@ -1103,7 +1172,7 @@ function saveToStorage() {
 
 function scheduleOneDriveSave() {
   if (state.applyingOneDriveState || loadAuthProvider() !== "microsoft") return;
-  if (!readMicrosoftToken()) {
+  if (!hasMicrosoftConnection()) {
     requireMicrosoftRelogin();
     return;
   }
@@ -1116,8 +1185,7 @@ function scheduleOneDriveSave() {
 
 async function syncOneDrive({ preferCloud = false } = {}) {
   if (state.oneDriveSyncing || loadAuthProvider() !== "microsoft") return;
-  const token = readMicrosoftToken();
-  if (!token) {
+  if (!hasMicrosoftConnection()) {
     requireMicrosoftRelogin();
     return;
   }
@@ -1125,17 +1193,17 @@ async function syncOneDrive({ preferCloud = false } = {}) {
   state.oneDriveSyncing = true;
   setOneDriveBusy(true, "同期中...");
   try {
-    const cloudPayload = await downloadStateFromOneDrive(token.accessToken);
+    const cloudPayload = await downloadStateFromOneDrive();
     if (cloudPayload && preferCloud) {
       if (shouldKeepLocalStateOverCloud(cloudPayload)) {
-        await uploadStateToOneDrive(token.accessToken, { manageBusyState: false });
+        await uploadStateToOneDrive({ manageBusyState: false });
         setOneDriveStatus("ローカルの内容を保護しました");
         return;
       }
       applyOneDriveState(cloudPayload);
       setOneDriveStatus("同期済み");
     } else {
-      await uploadStateToOneDrive(token.accessToken, { manageBusyState: false });
+      await uploadStateToOneDrive({ manageBusyState: false });
     }
   } catch (error) {
     console.warn("OneDrive sync error:", error);
@@ -1146,10 +1214,8 @@ async function syncOneDrive({ preferCloud = false } = {}) {
   }
 }
 
-async function downloadStateFromOneDrive(accessToken) {
-  const response = await fetch(oneDriveContentUrl(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+async function downloadStateFromOneDrive() {
+  const response = await graphFetch(oneDriveContentUrl());
   if (response.status === 404) return null;
   if (!response.ok) throw await createOneDriveError(response);
 
@@ -1160,8 +1226,8 @@ async function downloadStateFromOneDrive(accessToken) {
   return payload;
 }
 
-async function uploadStateToOneDrive(accessToken = readMicrosoftToken()?.accessToken, options = {}) {
-  if (!accessToken) {
+async function uploadStateToOneDrive(options = {}) {
+  if (!hasMicrosoftConnection()) {
     requireMicrosoftRelogin();
     return;
   }
@@ -1171,12 +1237,9 @@ async function uploadStateToOneDrive(accessToken = readMicrosoftToken()?.accessT
   window.clearTimeout(state.oneDriveSaveTimer);
 
   try {
-    const response = await fetch(oneDriveContentUrl(), {
+    const response = await graphFetch(oneDriveContentUrl(), {
       method: "PUT",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json; charset=utf-8",
-      },
+      headers: { "Content-Type": "application/json; charset=utf-8" },
       body: serializedState(),
     });
     if (!response.ok) throw await createOneDriveError(response);
@@ -1304,7 +1367,7 @@ function updateOneDriveStatusLabel() {
   }
 
   const usesMicrosoft = loadAuthProvider() === "microsoft";
-  const hasToken = Boolean(readMicrosoftToken());
+  const hasToken = hasMicrosoftConnection();
   const fallbackMessage = usesMicrosoft
     ? hasToken ? "同期確認中" : "再ログインが必要です"
     : "OneDrive未接続";
@@ -1380,13 +1443,18 @@ function touchNotebook(notebookId, timestamp = Date.now()) {
 }
 
 function normalizeNote(note, fallbackNotebookId = "") {
-  const body = String(note.body || "");
+  const legacy = extractLegacyMemos(String(note.body || ""));
+  const body = legacy.body;
+  const memos = Array.isArray(note.memos)
+    ? note.memos.map(normalizeMemo).filter(Boolean)
+    : legacy.memos;
   return {
     id: note.id || crypto.randomUUID(),
     notebookId: note.notebookId || fallbackNotebookId,
     title: note.title || deriveTitle(body),
     date: note.date || today(),
     body,
+    memos,
     tags: Array.isArray(note.tags)
       ? note.tags.filter(Boolean)
       : String(note.tags || "")
@@ -1406,6 +1474,7 @@ function createNoteObject(notebookId, title = "新しいノート") {
     title,
     date: today(),
     body: "",
+    memos: [],
     tags: [],
     important: false,
     createdAt: Date.now(),
@@ -1749,6 +1818,7 @@ async function formatCurrentNoteWithAI() {
 
     replaceEditorWithMarkdown(payload.formatted || "");
     updateCurrentNoteFromEditor({ render: false });
+    renderMemoLayer();
     saveToStorage();
     renderNotesPage(false);
     setAIFormatStatus("整えました。", "success");
@@ -2392,26 +2462,153 @@ function prepareEditorImages() {
   });
 }
 
-function prepareFreeNotes() {
-  if (!els.bodyInput) return;
-  els.bodyInput.querySelectorAll(".free-note").forEach((note) => {
-    note.contentEditable = "true";
-    note.setAttribute("data-placeholder", "繝｡繝｢");
+function createFreeNoteAtCursor() {
+  if (!els.bodyInput || els.bodyInput.getAttribute("aria-disabled") === "true") return;
+  const note = currentNote();
+  if (!note) return;
+
+  restoreEditorSelection();
+  const block = currentEditorBlock() || ensureCurrentParagraphBlock();
+  const anchorId = block ? ensureEditorBlockId(block) : "";
+  const memo = {
+    id: crypto.randomUUID(),
+    anchorId,
+    top: block?.offsetTop ?? getCurrentEditorLineTop(),
+    content: "",
+  };
+
+  note.memos = Array.isArray(note.memos) ? note.memos : [];
+  note.memos.push(memo);
+  note.body = getEditorBody();
+  markNoteContentChanged(note);
+  renderMemoLayer(memo.id);
+  renderNotesPage(false);
+  saveToStorage();
+}
+
+function ensureEditorBlockId(block) {
+  if (!block.dataset.blockId) block.dataset.blockId = crypto.randomUUID();
+  return block.dataset.blockId;
+}
+
+function renderMemoLayer(focusMemoId = "") {
+  if (!els.memoLayer) return;
+  els.memoLayer.innerHTML = "";
+  const note = currentNote();
+  if (!note) return;
+
+  note.memos = Array.isArray(note.memos) ? note.memos : [];
+  attachLegacyMemosToBlocks(note.memos);
+  note.memos.forEach((memo) => {
+    const card = document.createElement("div");
+    card.className = "memo-card";
+    card.dataset.memoId = memo.id;
+
+    const input = document.createElement("textarea");
+    input.className = "memo-input";
+    input.value = memo.content;
+    input.placeholder = "メモ";
+    input.rows = 1;
+    input.setAttribute("aria-label", "余白メモ");
+    input.addEventListener("input", () => updateMemoContent(memo, input));
+
+    const removeButton = document.createElement("button");
+    removeButton.className = "memo-remove-button";
+    removeButton.type = "button";
+    removeButton.textContent = "×";
+    removeButton.setAttribute("aria-label", "メモを削除");
+    removeButton.addEventListener("click", () => deleteMemo(memo.id));
+
+    card.append(input, removeButton);
+    els.memoLayer.appendChild(card);
+    resizeMemoInput(input);
+  });
+
+  scheduleMemoPositionUpdate();
+  if (focusMemoId) {
+    window.requestAnimationFrame(() => {
+      const card = Array.from(els.memoLayer.querySelectorAll(".memo-card")).find((item) => item.dataset.memoId === focusMemoId);
+      card?.querySelector(".memo-input")?.focus();
+    });
+  }
+}
+
+function attachLegacyMemosToBlocks(memos) {
+  const blocks = Array.from(els.bodyInput?.querySelectorAll("p, div, li, h1, h2, h3, h4, h5, h6") || [])
+    .filter(isEditableParagraphBlock);
+  if (!blocks.length) return;
+  const availableAnchorIds = new Set(blocks.map((block) => block.dataset.blockId).filter(Boolean));
+
+  memos.forEach((memo) => {
+    if (memo.anchorId && availableAnchorIds.has(memo.anchorId)) return;
+    const nearest = blocks.reduce((best, block) => {
+      return Math.abs(block.offsetTop - memo.top) < Math.abs(best.offsetTop - memo.top) ? block : best;
+    }, blocks[0]);
+    memo.anchorId = ensureEditorBlockId(nearest);
   });
 }
 
-function createFreeNoteAtCursor() {
-  if (!els.bodyInput || els.bodyInput.getAttribute("aria-disabled") === "true") return;
-  const freeNote = document.createElement("aside");
-  freeNote.className = "free-note";
-  freeNote.contentEditable = "true";
-  freeNote.dataset.placeholder = "繝｡繝｢";
-  freeNote.style.top = `${getCurrentEditorLineTop()}px`;
-  freeNote.appendChild(document.createElement("br"));
-  els.bodyInput.appendChild(freeNote);
-  focusFreeNote(freeNote);
-  updateCurrentNoteFromEditor();
+function updateMemoContent(memo, input) {
+  memo.content = input.value;
+  resizeMemoInput(input);
+  const note = currentNote();
+  if (note) {
+    markNoteContentChanged(note);
+    renderNotesPage(false);
+  }
+  scheduleMemoPositionUpdate();
+  scheduleSave();
+}
+
+function resizeMemoInput(input) {
+  input.style.height = "0";
+  input.style.height = `${Math.max(38, input.scrollHeight)}px`;
+}
+
+function deleteMemo(memoId) {
+  const note = currentNote();
+  if (!note) return;
+  note.memos = (note.memos || []).filter((memo) => memo.id !== memoId);
+  markNoteContentChanged(note);
+  renderMemoLayer();
+  renderNotesPage(false);
   saveToStorage();
+}
+
+function markNoteContentChanged(note) {
+  note.updatedAt = Date.now();
+  state.notes.sort(sortNotes);
+  touchNotebook(note.notebookId, note.updatedAt);
+}
+
+function scheduleMemoPositionUpdate() {
+  window.cancelAnimationFrame(state.memoPositionFrame);
+  state.memoPositionFrame = window.requestAnimationFrame(positionMemoCards);
+}
+
+function positionMemoCards() {
+  if (!els.editorCanvas || !els.memoLayer || !els.bodyInput) return;
+  const note = currentNote();
+  if (!note) return;
+  els.editorCanvas.style.minHeight = "";
+  attachLegacyMemosToBlocks(note.memos || []);
+
+  const blockById = new Map(
+    Array.from(els.bodyInput.querySelectorAll("[data-block-id]")).map((block) => [block.dataset.blockId, block]),
+  );
+  let nextAvailableTop = 12;
+  Array.from(els.memoLayer.querySelectorAll(".memo-card")).forEach((card) => {
+    const memo = (note.memos || []).find((item) => item.id === card.dataset.memoId);
+    if (!memo) return;
+    const anchor = blockById.get(memo.anchorId);
+    const desiredTop = anchor ? anchor.offsetTop : memo.top;
+    const top = Math.max(12, desiredTop, nextAvailableTop);
+    card.style.top = `${Math.round(top)}px`;
+    nextAvailableTop = top + card.offsetHeight + 10;
+  });
+
+  const minimumHeight = Math.max(els.bodyInput.scrollHeight, nextAvailableTop + 18, els.editorCanvas.parentElement?.clientHeight || 0);
+  els.editorCanvas.style.minHeight = `${minimumHeight}px`;
 }
 
 function getCurrentEditorLineTop() {
@@ -2673,6 +2870,31 @@ function freehandPoint(event) {
   };
 }
 
+function normalizeMemo(memo) {
+  if (!memo || typeof memo !== "object") return null;
+  return {
+    id: memo.id || crypto.randomUUID(),
+    anchorId: String(memo.anchorId || ""),
+    top: Math.max(0, Number(memo.top) || 24),
+    content: String(memo.content || ""),
+  };
+}
+
+function extractLegacyMemos(body) {
+  if (!body.includes("free-note")) return { body, memos: [] };
+
+  const container = document.createElement("div");
+  container.innerHTML = body;
+  const memos = Array.from(container.querySelectorAll(".free-note")).map((node) => ({
+    id: crypto.randomUUID(),
+    anchorId: "",
+    top: Math.max(0, Number.parseFloat(node.style.top) || 24),
+    content: node.textContent?.replace(/\u00a0/g, " ").trim() || "",
+  }));
+  container.querySelectorAll(".free-note").forEach((node) => node.remove());
+  return { body: container.innerHTML, memos };
+}
+
 function finishFreehandDrawing() {
   if (!state.freehand) return;
   const drawing = state.freehand;
@@ -2779,17 +3001,6 @@ function placeCaretAtNodeStart(node) {
   selection?.removeAllRanges();
   selection?.addRange(range);
   els.bodyInput?.focus();
-}
-function focusFreeNote(freeNote) {
-  window.requestAnimationFrame(() => {
-    freeNote.focus();
-    const range = document.createRange();
-    range.selectNodeContents(freeNote);
-    range.collapse(false);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-  });
 }
 
 function normalizeImageSpacer(figure) {
@@ -3462,7 +3673,7 @@ function renderEditor() {
   if (els.dateLabel) els.dateLabel.textContent = note.date || today();
   els.bodyInput.innerHTML = note.body;
   prepareEditorImages();
-  prepareFreeNotes();
+  renderMemoLayer();
   updateEditorHeader();
   updateFormattingActiveState();
 }
@@ -3495,6 +3706,8 @@ function toggleCurrentImportant() {
 
 function clearEditor() {
   if (els.bodyInput) els.bodyInput.innerHTML = "";
+  if (els.memoLayer) els.memoLayer.innerHTML = "";
+  if (els.editorCanvas) els.editorCanvas.style.minHeight = "";
 }
 
 function focusBody() {
@@ -3510,35 +3723,3 @@ function renderCurrentPage() {
   }
   renderNotesPage();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
