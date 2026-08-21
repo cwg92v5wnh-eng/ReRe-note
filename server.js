@@ -8,6 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const port = Number(process.env.PORT) || 3000;
+const microsoftRefreshCookie = "lecture-note-ms-refresh";
+const microsoftRefreshCookieMaxAge = 7 * 24 * 60 * 60;
 const maxContentLength = 8000;
 const defaultModelName = "gemini-3-flash-preview";
 const fallbackModelName = "gemini-2.5-flash";
@@ -22,6 +24,8 @@ const aiTimeoutMs = 45000;
 
 app.use(express.json({ limit: "64kb" }));
 app.use(express.static(__dirname));
+
+app.set("trust proxy", 1);
 
 app.get("/", (_request, response) => {
   response.sendFile(path.join(__dirname, "LectureNote.html"));
@@ -39,6 +43,84 @@ app.get("/api/config", (_request, response) => {
     microsoftAllowedOrigins: allowedOrigins,
     authMode: process.env.AUTH_MODE || "local-and-microsoft",
   });
+});
+
+app.post("/api/auth/microsoft/exchange", async (request, response) => {
+  const { code, codeVerifier, redirectUri } = request.body ?? {};
+  if (!isTrustedMicrosoftRequest(request, redirectUri)) {
+    response.status(403).json({ error: "Microsoft login origin is not allowed." });
+    return;
+  }
+  if (![code, codeVerifier, redirectUri].every((value) => typeof value === "string" && value.trim())) {
+    response.status(400).json({ error: "Microsoft login information is incomplete." });
+    return;
+  }
+
+  try {
+    const token = await requestMicrosoftToken({
+      code,
+      code_verifier: codeVerifier,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    });
+    storeMicrosoftRefreshCookie(request, response, token.refresh_token);
+    response.json(publicMicrosoftToken(token));
+  } catch (error) {
+    sendMicrosoftTokenError(response, error);
+  }
+});
+
+app.post("/api/auth/microsoft/refresh", async (request, response) => {
+  if (!isTrustedMicrosoftRequest(request)) {
+    response.status(403).json({ error: "Microsoft refresh origin is not allowed." });
+    return;
+  }
+
+  const refreshToken = readCookie(request, microsoftRefreshCookie);
+  if (!refreshToken) {
+    response.status(401).json({ error: "Microsoft session is not available." });
+    return;
+  }
+
+  try {
+    const token = await requestMicrosoftToken({
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    });
+    storeMicrosoftRefreshCookie(request, response, token.refresh_token || refreshToken);
+    response.json(publicMicrosoftToken(token));
+  } catch (error) {
+    if (error.status === 400 || error.status === 401) clearMicrosoftRefreshCookie(request, response);
+    sendMicrosoftTokenError(response, error);
+  }
+});
+
+app.post("/api/auth/microsoft/adopt", async (request, response) => {
+  if (!isTrustedMicrosoftRequest(request)) {
+    response.status(403).json({ error: "Microsoft refresh origin is not allowed." });
+    return;
+  }
+  const refreshToken = typeof request.body?.refreshToken === "string" ? request.body.refreshToken : "";
+  if (!refreshToken) {
+    response.status(400).json({ error: "Microsoft refresh information is missing." });
+    return;
+  }
+
+  try {
+    const token = await requestMicrosoftToken({
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    });
+    storeMicrosoftRefreshCookie(request, response, token.refresh_token || refreshToken);
+    response.json(publicMicrosoftToken(token));
+  } catch (error) {
+    sendMicrosoftTokenError(response, error);
+  }
+});
+
+app.post("/api/auth/microsoft/logout", (request, response) => {
+  clearMicrosoftRefreshCookie(request, response);
+  response.status(204).end();
 });
 
 app.post("/api/ai/format-note", async (request, response) => {
@@ -166,5 +248,108 @@ function aiErrorMessage(error) {
 app.listen(port, () => {
   console.log(`LectureNote server running at http://localhost:${port}`);
 });
+
+async function requestMicrosoftToken(parameters) {
+  const clientId = String(process.env.MICROSOFT_CLIENT_ID || "").trim();
+  if (!clientId) {
+    const error = new Error("MICROSOFT_CLIENT_ID is not configured.");
+    error.status = 500;
+    throw error;
+  }
+
+  const tenantId = sanitizeMicrosoftTenantId(process.env.MICROSOFT_TENANT_ID);
+  const tokenResponse = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      scope: "User.Read Files.ReadWrite.AppFolder offline_access",
+      ...parameters,
+    }),
+  });
+  const payload = await tokenResponse.json().catch(() => ({}));
+  if (!tokenResponse.ok) {
+    const error = new Error(payload.error_description || payload.error || "Microsoft token request failed.");
+    error.status = tokenResponse.status;
+    error.code = payload.error || "token_request_failed";
+    throw error;
+  }
+  return payload;
+}
+
+function publicMicrosoftToken(token) {
+  return {
+    access_token: token.access_token || "",
+    expires_in: Number(token.expires_in) || 0,
+    scope: token.scope || "",
+    token_type: token.token_type || "Bearer",
+  };
+}
+
+function storeMicrosoftRefreshCookie(request, response, refreshToken) {
+  if (!refreshToken) return;
+  response.setHeader("Set-Cookie", serializeCookie(microsoftRefreshCookie, refreshToken, request, microsoftRefreshCookieMaxAge));
+}
+
+function clearMicrosoftRefreshCookie(request, response) {
+  response.setHeader("Set-Cookie", serializeCookie(microsoftRefreshCookie, "", request, 0));
+}
+
+function serializeCookie(name, value, request, maxAge) {
+  const parts = [
+    `${name}=${encodeURIComponent(value)}`,
+    "Path=/api/auth/microsoft",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${maxAge}`,
+  ];
+  if (request.secure || request.get("x-forwarded-proto") === "https") parts.push("Secure");
+  return parts.join("; ");
+}
+
+function readCookie(request, name) {
+  const prefix = `${name}=`;
+  const match = String(request.headers.cookie || "")
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match.slice(prefix.length));
+  } catch {
+    return "";
+  }
+}
+
+function isTrustedMicrosoftRequest(request, redirectUri = "") {
+  const origin = String(request.get("origin") || "").replace(/\/$/, "");
+  const requestOrigin = `${request.protocol}://${request.get("host")}`.replace(/\/$/, "");
+  const configuredOrigins = String(process.env.MICROSOFT_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  const allowedOrigins = new Set([requestOrigin, ...configuredOrigins]);
+  if (origin && !allowedOrigins.has(origin)) return false;
+  if (!redirectUri) return true;
+  try {
+    const redirect = new URL(redirectUri);
+    return allowedOrigins.has(redirect.origin) && redirect.pathname === "/auth-callback.html";
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeMicrosoftTenantId(value) {
+  const tenant = String(value || "common").trim();
+  return /^[a-z0-9.-]+$/i.test(tenant) ? tenant : "common";
+}
+
+function sendMicrosoftTokenError(response, error) {
+  const status = error.status === 400 || error.status === 401 ? 401 : Number(error.status) || 502;
+  response.status(status).json({
+    error: error.code || "microsoft_token_failed",
+    detail: String(error.message || "Microsoft token request failed.").slice(0, 240),
+  });
+}
 
 

@@ -10,6 +10,7 @@ const MICROSOFT_GRAPH_SCOPES = ["User.Read", "Files.ReadWrite.AppFolder", "offli
 const ONEDRIVE_STATE_FILE = "lecture-note-data.json";
 const AUTOSAVE_DELAY = 180;
 const ONEDRIVE_SAVE_DELAY = 1200;
+const MICROSOFT_REFRESH_LEAD = 5 * 60 * 1000;
 const NOTEBOOK_INITIAL_LIMIT = 7;
 const RECENT_INITIAL_LIMIT = 7;
 const RECENT_MAX_LIMIT = 10;
@@ -47,6 +48,8 @@ state.savedEditorRange = null;
 state.oneDriveSaveTimer = null;
 state.oneDriveSyncing = false;
 state.applyingOneDriveState = false;
+state.microsoftRefreshTimer = null;
+state.microsoftRefreshPromise = null;
 
 const els = {
   newNotebookBtn: document.getElementById("newNotebookBtn"),
@@ -221,6 +224,25 @@ function wireAuthEvents() {
   els.accountOverlay?.addEventListener("click", (event) => {
     if (event.target === els.accountOverlay) closeAccountMenu();
   });
+  window.addEventListener("online", reconnectMicrosoftInBackground);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") reconnectMicrosoftInBackground();
+  });
+}
+
+async function reconnectMicrosoftInBackground() {
+  if (!activeUser || loadAuthProvider() !== "microsoft" || !microsoftClientId) return;
+  try {
+    await getMicrosoftAccessToken();
+    setOneDriveStatus("Microsoft接続済み");
+  } catch (error) {
+    console.warn("Microsoft background reconnect error:", error);
+    if (error?.status === 401) {
+      requireMicrosoftRelogin();
+    } else {
+      setOneDriveStatus("Microsoft接続を自動再試行します", true);
+    }
+  }
 }
 
 async function initializeMicrosoftAuth() {
@@ -252,10 +274,19 @@ async function initializeMicrosoftAuth() {
     els.microsoftLoginBtn.disabled = false;
     els.microsoftLoginBtn.textContent = "Microsoftでログイン";
     if (activeUser && loadAuthProvider() === "microsoft") {
-      if (hasMicrosoftConnection()) {
-        syncOneDrive({ preferCloud: true });
-      } else {
-        requireMicrosoftRelogin();
+      setOneDriveStatus("Microsoft接続を復元中");
+      try {
+        await getMicrosoftAccessToken();
+        await syncOneDrive({ preferCloud: true });
+      } catch (error) {
+        console.warn("Microsoft session restore error:", error);
+        if (error?.status === 401) {
+          requireMicrosoftRelogin();
+        } else {
+          setOneDriveStatus("Microsoft接続を自動再試行します", true);
+          window.clearTimeout(state.microsoftRefreshTimer);
+          state.microsoftRefreshTimer = window.setTimeout(initializeMicrosoftAuth, 60000);
+        }
       }
     }
   } catch {
@@ -627,6 +658,7 @@ function requireMicrosoftRelogin(message = "再ログインが必要です") {
 }
 async function switchMicrosoftAccount() {
   closeAccountMenu();
+  await clearMicrosoftServerSession();
   clearActiveUser();
   clearMicrosoftToken();
   renderAuthState();
@@ -772,21 +804,21 @@ function waitForMicrosoftAuthMessage(expectedState) {
 }
 
 async function exchangeMicrosoftCode(code, verifier) {
-  const response = await fetch(`${microsoftAuthorityBaseUrl()}/oauth2/v2.0/token`, {
+  const response = await fetch("/api/auth/microsoft/exchange", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: microsoftClientId,
-      scope: MICROSOFT_GRAPH_SCOPES.join(" "),
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       code,
-      redirect_uri: microsoftRedirectUri(),
-      grant_type: "authorization_code",
-      code_verifier: verifier,
+      codeVerifier: verifier,
+      redirectUri: microsoftRedirectUri(),
     }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error_description || payload.error || "token_exchange_failed");
+    const error = new Error(payload.detail || payload.error || "token_exchange_failed");
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -796,38 +828,35 @@ async function getMicrosoftAccessToken({ forceRefresh = false } = {}) {
   if (!forceRefresh && token?.accessToken && Number(token.expiresAt) > Date.now() + 60000) {
     return token.accessToken;
   }
-  if (!token?.refreshToken) {
-    throw microsoftReconnectError();
+  if (state.microsoftRefreshPromise) return state.microsoftRefreshPromise;
+
+  state.microsoftRefreshPromise = (async () => {
+    const refreshedToken = await refreshMicrosoftToken(token?.refreshToken || "");
+    saveMicrosoftToken(refreshedToken);
+    return refreshedToken.access_token;
+  })();
+  try {
+    return await state.microsoftRefreshPromise;
+  } finally {
+    state.microsoftRefreshPromise = null;
   }
-  const refreshedToken = await refreshMicrosoftToken(token.refreshToken);
-  saveMicrosoftToken(refreshedToken, token);
-  return readMicrosoftToken()?.accessToken || refreshedToken.access_token;
 }
 
 async function refreshMicrosoftToken(refreshToken) {
-  const response = await fetch(`${microsoftAuthorityBaseUrl()}/oauth2/v2.0/token`, {
+  const endpoint = refreshToken ? "/api/auth/microsoft/adopt" : "/api/auth/microsoft/refresh";
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: microsoftClientId,
-      scope: MICROSOFT_GRAPH_SCOPES.join(" "),
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: refreshToken ? JSON.stringify({ refreshToken }) : "{}",
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(payload.error_description || payload.error || "token_refresh_failed");
-    error.status = 401;
+    const error = new Error(payload.detail || payload.error || "token_refresh_failed");
+    error.status = response.status;
     throw error;
   }
   return payload;
-}
-
-function microsoftReconnectError() {
-  const error = new Error("再ログインが必要です");
-  error.status = 401;
-  return error;
 }
 
 async function graphFetch(url, options = {}, retry = true) {
@@ -907,14 +936,14 @@ function microsoftRedirectUri() {
   return `${window.location.origin}/auth-callback.html`;
 }
 
-function saveMicrosoftToken(token, previousToken = readStoredMicrosoftToken()) {
+function saveMicrosoftToken(token) {
   try {
     sessionStorage.setItem(MICROSOFT_TOKEN_KEY, JSON.stringify({
       accessToken: token.access_token || token.accessToken || "",
-      refreshToken: token.refresh_token || token.refreshToken || previousToken?.refreshToken || "",
       expiresAt: Date.now() + Number(token.expires_in || token.expiresIn || 0) * 1000,
-      scope: token.scope || previousToken?.scope || "",
+      scope: token.scope || "",
     }));
+    scheduleMicrosoftTokenRefresh();
   } catch {
     // Microsoft login can still be used for the current page session.
   }
@@ -936,16 +965,55 @@ function readMicrosoftToken() {
 
 function hasMicrosoftConnection() {
   const token = readStoredMicrosoftToken();
-  return Boolean(token?.accessToken || token?.refreshToken);
+  return Boolean(token?.accessToken);
+}
+
+function scheduleMicrosoftTokenRefresh() {
+  window.clearTimeout(state.microsoftRefreshTimer);
+  const token = readStoredMicrosoftToken();
+  if (!token?.accessToken || !Number(token.expiresAt)) return;
+
+  const delay = Math.max(5000, Number(token.expiresAt) - Date.now() - MICROSOFT_REFRESH_LEAD);
+  state.microsoftRefreshTimer = window.setTimeout(async () => {
+    if (!activeUser || loadAuthProvider() !== "microsoft") return;
+    try {
+      await getMicrosoftAccessToken({ forceRefresh: true });
+      setOneDriveStatus("Microsoft接続を自動更新しました");
+    } catch (error) {
+      console.warn("Microsoft background refresh error:", error);
+      if (error?.status === 401) {
+        requireMicrosoftRelogin();
+      } else {
+        setOneDriveStatus("Microsoft接続を再試行します", true);
+        state.microsoftRefreshTimer = window.setTimeout(scheduleMicrosoftTokenRefresh, 60000);
+      }
+    }
+  }, delay);
 }
 
 function clearMicrosoftToken() {
+  window.clearTimeout(state.microsoftRefreshTimer);
+  state.microsoftRefreshTimer = null;
+  state.microsoftRefreshPromise = null;
   try {
     sessionStorage.removeItem(MICROSOFT_TOKEN_KEY);
     sessionStorage.removeItem(MICROSOFT_AUTH_VERIFIER_KEY);
     sessionStorage.removeItem(MICROSOFT_AUTH_STATE_KEY);
   } catch {
     // Best-effort cleanup.
+  }
+}
+
+async function clearMicrosoftServerSession() {
+  if (window.location.protocol === "file:") return;
+  try {
+    await fetch("/api/auth/microsoft/logout", {
+      method: "POST",
+      credentials: "same-origin",
+      keepalive: true,
+    });
+  } catch {
+    // The local logout still succeeds if the server cannot be reached.
   }
 }
 
@@ -972,6 +1040,7 @@ function base64UrlEncode(bytes) {
 function logoutUser() {
   window.clearTimeout(state.oneDriveSaveTimer);
   closeAccountMenu();
+  void clearMicrosoftServerSession();
   clearActiveUser();
   clearMicrosoftToken();
   closeMenu();
@@ -1172,10 +1241,6 @@ function saveToStorage() {
 
 function scheduleOneDriveSave() {
   if (state.applyingOneDriveState || loadAuthProvider() !== "microsoft") return;
-  if (!hasMicrosoftConnection()) {
-    requireMicrosoftRelogin();
-    return;
-  }
   window.clearTimeout(state.oneDriveSaveTimer);
   setOneDriveStatus("保存待ち");
   state.oneDriveSaveTimer = window.setTimeout(() => {
@@ -1185,10 +1250,6 @@ function scheduleOneDriveSave() {
 
 async function syncOneDrive({ preferCloud = false } = {}) {
   if (state.oneDriveSyncing || loadAuthProvider() !== "microsoft") return;
-  if (!hasMicrosoftConnection()) {
-    requireMicrosoftRelogin();
-    return;
-  }
 
   state.oneDriveSyncing = true;
   setOneDriveBusy(true, "同期中...");
@@ -1227,11 +1288,6 @@ async function downloadStateFromOneDrive() {
 }
 
 async function uploadStateToOneDrive(options = {}) {
-  if (!hasMicrosoftConnection()) {
-    requireMicrosoftRelogin();
-    return;
-  }
-
   const manageBusyState = options.manageBusyState !== false;
   if (manageBusyState) setOneDriveBusy(true, "保存中...");
   window.clearTimeout(state.oneDriveSaveTimer);
@@ -1369,10 +1425,10 @@ function updateOneDriveStatusLabel() {
   const usesMicrosoft = loadAuthProvider() === "microsoft";
   const hasToken = hasMicrosoftConnection();
   const fallbackMessage = usesMicrosoft
-    ? hasToken ? "同期確認中" : "再ログインが必要です"
+    ? hasToken ? "同期確認中" : "Microsoft接続を復元中"
     : "OneDrive未接続";
   const message = document.body.dataset.oneDriveStatus || fallbackMessage;
-  const isError = document.body.dataset.oneDriveStatusKind === "error" || (usesMicrosoft && !hasToken);
+  const isError = document.body.dataset.oneDriveStatusKind === "error";
   els.oneDriveStatusLabel.textContent = message;
   els.oneDriveStatusLabel.dataset.kind = isError ? "error" : "normal";
 }
