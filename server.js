@@ -251,8 +251,14 @@ app.listen(port, () => {
 
 async function requestMicrosoftToken(parameters) {
   const clientId = String(process.env.MICROSOFT_CLIENT_ID || "").trim();
+  const clientSecret = String(process.env.MICROSOFT_CLIENT_SECRET || "").trim();
   if (!clientId) {
     const error = new Error("MICROSOFT_CLIENT_ID is not configured.");
+    error.status = 500;
+    throw error;
+  }
+  if (!clientSecret) {
+    const error = new Error("MICROSOFT_CLIENT_SECRET is not configured.");
     error.status = 500;
     throw error;
   }
@@ -263,6 +269,7 @@ async function requestMicrosoftToken(parameters) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: clientId,
+      client_secret: clientSecret,
       scope: "User.Read Files.ReadWrite.AppFolder offline_access",
       ...parameters,
     }),

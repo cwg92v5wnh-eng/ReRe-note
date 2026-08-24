@@ -26,6 +26,7 @@ http://localhost:3000/auth-callback.html
 
 ```text
 MICROSOFT_CLIENT_ID=Azureのアプリケーション（クライアント）ID
+MICROSOFT_CLIENT_SECRET=Azureのクライアントシークレットの値
 MICROSOFT_TENANT_ID=consumers
 AUTH_MODE=microsoft-only
 MICROSOFT_ALLOWED_ORIGINS=https://公開したドメイン
@@ -36,6 +37,8 @@ GEMINI_MODEL=gemini-3-flash-preview
 `AUTH_MODE=microsoft-only` にすると、公開サイトではメールだけの簡易ログインを隠します。
 
 `MICROSOFT_ALLOWED_ORIGINS` は、Microsoftログインを開始してよいURLの安全リストです。公開URLを入れてください。
+
+MicrosoftのリダイレクトURIは「Web」として登録します。クライアントシークレットはAzure App Serviceの環境変数にだけ保存し、リポジトリやブラウザには含めません。
 
 ## OneDrive保存
 

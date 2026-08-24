@@ -906,8 +906,17 @@ async function completeMicrosoftLogin(profile) {
 function readableMicrosoftAuthError(error) {
   const message = String(error?.message || error || "");
   console.warn("Microsoft login error:", error);
-  if (message.includes("AADSTS70002") || message.includes("client_secret")) {
-    return `Microsoftアプリ登録で、リダイレクトURIを「シングルページ アプリケーション（SPA）」として登録してください: ${microsoftRedirectUri()}`;
+  if (message.includes("MICROSOFT_CLIENT_SECRET")) {
+    return "サーバーにMicrosoftのクライアントシークレットが設定されていません。";
+  }
+  if (message.includes("AADSTS7000215") || message.includes("invalid_client")) {
+    return "Microsoftのクライアントシークレットが正しいか、有効期限が切れていないか確認してください。";
+  }
+  if (message.includes("AADSTS90023")) {
+    return `リダイレクトURIをMicrosoftアプリ登録の「Web」として登録してください: ${microsoftRedirectUri()}`;
+  }
+  if (message.includes("AADSTS70002") || message.includes("AADSTS7000218")) {
+    return "MicrosoftのWebアプリ認証設定を確認してください。";
   }
   if (message.includes("cancel") || message.includes("access_denied")) return "Microsoftログインがキャンセルされました。";
   if (message.includes("popup_blocked") || message.includes("popup")) {
@@ -917,7 +926,7 @@ function readableMicrosoftAuthError(error) {
     return `Microsoftアプリ登録のリダイレクトURIを確認してください。登録するURL: ${microsoftRedirectUri()}`;
   }
   if (message.includes("AADSTS9002326") || message.includes("single-page application")) {
-    return "Microsoftアプリ登録のプラットフォームを「シングルページ アプリケーション」にしてください。";
+    return "Microsoftアプリ登録のリダイレクトURIを「Web」として登録してください。";
   }
   if (message.includes("unauthorized_client")) {
     return "Microsoftアプリ登録で、個人用Microsoftアカウントを許可しているか確認してください。";
