@@ -357,11 +357,63 @@ body.is-creating-notebook {
   font-weight: 800;
 }
 
-.color-choice-row,
-.icon-choice-row {
+.choice-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.choice-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.color-choice-row {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
+}
+
+.icon-choice-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 58px);
+  gap: 12px;
+  max-width: 100%;
+}
+
+.tone-choice-row {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid rgba(222, 214, 202, 0.92);
+  border-radius: 10px;
+  background: rgba(244, 241, 234, 0.72);
+}
+
+.tone-choice {
+  min-width: 68px;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.tone-choice:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.tone-choice.is-selected {
+  background: #fff;
+  color: #425a4a;
+  box-shadow: 0 2px 8px rgba(35, 28, 18, 0.1);
 }
 
 .color-choice,
@@ -385,6 +437,13 @@ body.is-creating-notebook {
   box-shadow: 0 10px 20px rgba(35, 28, 18, 0.08);
 }
 
+.color-choice:focus-visible,
+.icon-choice:focus-visible,
+.tone-choice:focus-visible {
+  outline: 2px solid #425a4a;
+  outline-offset: 3px;
+}
+
 .color-choice {
   width: 52px;
   height: 52px;
@@ -393,17 +452,7 @@ body.is-creating-notebook {
   color: #fff;
   font-size: 1.3rem;
   font-weight: 800;
-}
-
-.color-choice[data-color="green"] { background: #4f8a67; }
-.color-choice[data-color="blue"] { --choice-ring: #4a90e2; background: #4a90e2; }
-.color-choice[data-color="violet"] { --choice-ring: #8a63d2; background: #8a63d2; }
-.color-choice[data-color="orange"] { --choice-ring: #f2bb45; background: #f2bb45; }
-.color-choice[data-color="coral"] { --choice-ring: #ee6f61; background: #ee6f61; }
-.color-choice[data-color="gray"] { --choice-ring: #a9aaae; background: #c8c8cc; }
-
-.color-choice[data-color="green"] {
-  --choice-ring: #4f8a67;
+  background: var(--choice-color, #4f8a67);
 }
 
 .color-choice.is-selected {
@@ -466,7 +515,7 @@ body.is-creating-notebook {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(79, 138, 103, 0.12);
+  background: var(--preview-soft, rgba(79, 138, 103, 0.12));
   color: var(--preview-accent, #4f8a67);
 }
 
@@ -1339,8 +1388,8 @@ html[data-page="notebooks"] .user-strip {
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--notebook-soft, var(--accent-soft));
+  color: var(--notebook-ink, var(--accent));
   font-size: 0.76rem;
   font-weight: 700;
 }
@@ -1348,41 +1397,6 @@ html[data-page="notebooks"] .user-strip {
 .recent-chip-soft {
   background: rgba(66, 90, 74, 0.08);
   color: var(--muted);
-}
-
-.recent-chip[data-kind="violet"] {
-  background: rgba(199, 184, 255, 0.35);
-  color: #6756a8;
-}
-
-.recent-chip[data-kind="blue"] {
-  background: rgba(158, 198, 255, 0.4);
-  color: #446a99;
-}
-
-.recent-chip[data-kind="green"] {
-  background: rgba(159, 220, 181, 0.42);
-  color: #3d7154;
-}
-
-.recent-chip[data-kind="orange"] {
-  background: rgba(242, 193, 143, 0.42);
-  color: #8f5f28;
-}
-
-.recent-chip[data-kind="pink"] {
-  background: rgba(240, 170, 196, 0.42);
-  color: #96546e;
-}
-
-.recent-chip[data-kind="coral"] {
-  background: rgba(238, 111, 97, 0.22);
-  color: #9a4a40;
-}
-
-.recent-chip[data-kind="gray"] {
-  background: rgba(200, 200, 204, 0.36);
-  color: #626369;
 }
 
 .recent-panel {
@@ -2888,6 +2902,26 @@ html[data-page="notes"] .body-field {
     grid-template-columns: 1fr;
     min-height: auto;
     padding: 28px 20px 22px;
+  }
+
+  .icon-choice-row {
+    grid-template-columns: repeat(auto-fill, 54px);
+  }
+
+  .icon-choice {
+    width: 54px;
+    height: 54px;
+  }
+
+  .tone-choice-row {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tone-choice {
+    min-width: 0;
+    padding-inline: 8px;
   }
 
   .create-preview-side {

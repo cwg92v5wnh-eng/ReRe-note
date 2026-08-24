@@ -15,7 +15,7 @@ const NOTEBOOK_INITIAL_LIMIT = 7;
 const RECENT_INITIAL_LIMIT = 7;
 const RECENT_MAX_LIMIT = 10;
 const MAX_INDENT_LEVEL = 3;
-const NOTEBOOK_THEMES = {
+const NOTEBOOK_STANDARD_THEMES = {
   green: { accent: "#4f8a67", soft: "rgba(159, 220, 181, 0.34)", border: "rgba(79, 138, 103, 0.34)", focus: "rgba(79, 138, 103, 0.12)" },
   blue: { accent: "#4a90e2", soft: "rgba(158, 198, 255, 0.36)", border: "rgba(74, 144, 226, 0.34)", focus: "rgba(74, 144, 226, 0.12)" },
   violet: { accent: "#8a63d2", soft: "rgba(199, 184, 255, 0.38)", border: "rgba(138, 99, 210, 0.34)", focus: "rgba(138, 99, 210, 0.12)" },
@@ -24,6 +24,69 @@ const NOTEBOOK_THEMES = {
   coral: { accent: "#ee6f61", soft: "rgba(238, 111, 97, 0.24)", border: "rgba(238, 111, 97, 0.34)", focus: "rgba(238, 111, 97, 0.12)" },
   gray: { accent: "#787a80", soft: "rgba(200, 200, 204, 0.36)", border: "rgba(120, 122, 128, 0.28)", focus: "rgba(120, 122, 128, 0.1)" },
 };
+const NOTEBOOK_COLOR_PALETTES = {
+  green: {
+    light: { accent: "#8faa98", ink: "#54715f" },
+    standard: { accent: "#4f8a67", ink: "#3d7154" },
+    deep: { accent: "#356a4c", ink: "#2f5c43" },
+  },
+  blue: {
+    light: { accent: "#91b5d6", ink: "#557793" },
+    standard: { accent: "#4a90e2", ink: "#446a99" },
+    deep: { accent: "#356b9d", ink: "#315f89" },
+  },
+  violet: {
+    light: { accent: "#b5a4d2", ink: "#74658f" },
+    standard: { accent: "#8a63d2", ink: "#6756a8" },
+    deep: { accent: "#684c9e", ink: "#5b4389" },
+  },
+  orange: {
+    light: { accent: "#e4cb84", ink: "#806d38" },
+    standard: { accent: "#f2bb45", ink: "#8f5f28" },
+    deep: { accent: "#c18a2e", ink: "#805b25" },
+  },
+  coral: {
+    light: { accent: "#e7a39a", ink: "#8d5e58" },
+    standard: { accent: "#ee6f61", ink: "#9a4a40" },
+    deep: { accent: "#b9544a", ink: "#8d4139" },
+  },
+  gray: {
+    light: { accent: "#d5d2cd", ink: "#716e69" },
+    standard: { accent: "#b9babf", ink: "#626369" },
+    deep: { accent: "#74767d", ink: "#595b61" },
+  },
+};
+const NOTEBOOK_COLOR_OPTIONS = [
+  { key: "green", label: "緑" },
+  { key: "blue", label: "青" },
+  { key: "violet", label: "紫" },
+  { key: "orange", label: "黄" },
+  { key: "coral", label: "赤" },
+  { key: "gray", label: "灰" },
+];
+const NOTEBOOK_TONES = ["light", "standard", "deep"];
+const NOTEBOOK_ICONS = [
+  { key: "book", label: "本", paths: '<path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H20v18H7.5A3.5 3.5 0 0 0 4 23.5V5.5Z"/><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H20"/><path d="M8 6h8"/>' },
+  { key: "doc", label: "書類", paths: '<path d="M7 3h7l5 5v13H7V3Z"/><path d="M14 3v6h5"/><path d="M10 13h6"/><path d="M10 17h5"/>' },
+  { key: "bookmark", label: "しおり", paths: '<path d="M7 3h10v18l-5-3-5 3V3Z"/>' },
+  { key: "cap", label: "学習", paths: '<path d="M3 9.5 12 5l9 4.5-9 4.5-9-4.5Z"/><path d="M7 12v4.5c2.6 2 7.4 2 10 0V12"/><path d="M21 10v5"/>' },
+  { key: "idea", label: "アイデア", paths: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 10a4 4 0 1 1 8 0c0 2.5-2 3.3-2.5 6h-3C10 13.3 8 12.5 8 10Z"/>' },
+  { key: "case", label: "ケース", paths: '<path d="M4 8h16v12H4V8Z"/><path d="M9 8V5h6v3"/><path d="M4 13h16"/><path d="M10 13v2h4v-2"/>' },
+  { key: "folder", label: "フォルダ", paths: '<path d="M3 6h7l2 2h9v11H3V6Z"/><path d="M3 10h18"/>' },
+  { key: "star", label: "星", paths: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>' },
+  { key: "heart", label: "ハート", paths: '<path d="M20.8 5.7a5 5 0 0 0-7.1 0L12 7.4l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 21l8.8-8.2a5 5 0 0 0 0-7.1Z"/>' },
+  { key: "music", label: "音楽", paths: '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>' },
+  { key: "sparkles", label: "きらめき", paths: '<path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3Z"/><path d="m5 14 .8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z"/><path d="m19 12 .7 1.8 1.8.7-1.8.7L19 17l-.7-1.8-1.8-.7 1.8-.7L19 12Z"/>' },
+  { key: "coffee", label: "コーヒー", paths: '<path d="M4 8h13v6a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V8Z"/><path d="M17 10h2a3 3 0 0 1 0 6h-3"/><path d="M8 3v2M12 3v2"/>' },
+  { key: "pencil", label: "鉛筆", paths: '<path d="m4 20 4.2-1 10.9-10.9a2.1 2.1 0 0 0-3-3L5.2 16 4 20Z"/><path d="m14.8 6.4 3 3"/>' },
+  { key: "code", label: "コード", paths: '<path d="m8 7-5 5 5 5"/><path d="m16 7 5 5-5 5"/><path d="m14 4-4 16"/>' },
+  { key: "cloud", label: "雲", paths: '<path d="M6.5 19h11a4.5 4.5 0 0 0 .5-9 6 6 0 0 0-11.4-1.7A5.5 5.5 0 0 0 6.5 19Z"/>' },
+  { key: "user", label: "人物", paths: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>' },
+  { key: "target", label: "目標", paths: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>' },
+  { key: "diamond", label: "ひし形", paths: '<path d="m12 3 9 9-9 9-9-9 9-9Z"/>' },
+  { key: "circle", label: "円", paths: '<circle cx="12" cy="12" r="8"/>' },
+  { key: "triangle", label: "三角形", paths: '<path d="m12 4 9 16H3L12 4Z"/>' },
+];
 const PAGE = document.body.dataset.page || document.documentElement.dataset.page;
 let memoryStorageValue = null;
 let activeUser = loadActiveUser();
@@ -59,6 +122,7 @@ const els = {
   cancelNotebookCreateBtn: document.getElementById("cancelNotebookCreateBtn"),
   notebookNameInput: document.getElementById("notebookNameInput"),
   notebookColorChoices: document.getElementById("notebookColorChoices"),
+  notebookToneChoices: document.getElementById("notebookToneChoices"),
   notebookIconChoices: document.getElementById("notebookIconChoices"),
   notebookCreatePreview: document.getElementById("notebookCreatePreview"),
   notebookPreviewTitle: document.getElementById("notebookPreviewTitle"),
@@ -157,7 +221,8 @@ function enterApp() {
 
 function setupNotebookPage() {
   wireNotebookEvents();
-  renderIconChoices();
+  renderColorChoices("green", "standard");
+  renderIconChoices("book");
   ensureNotebookState();
   ensureDemoNotebookData();
   if (els.notebookSearchInput) els.notebookSearchInput.value = "";
@@ -338,6 +403,7 @@ function wireNotebookEvents() {
   els.cancelNotebookCreateBtn?.addEventListener("click", closeNotebookCreate);
   els.notebookNameInput?.addEventListener("input", updateNotebookCreatePreview);
   els.notebookColorChoices?.addEventListener("click", selectNotebookColor);
+  els.notebookToneChoices?.addEventListener("click", selectNotebookTone);
   els.notebookIconChoices?.addEventListener("click", selectNotebookIcon);
   els.notebookSearchInput?.addEventListener("input", () => {
     state.notebookLimit = NOTEBOOK_INITIAL_LIMIT;
@@ -1480,18 +1546,20 @@ function normalizeNotebook(notebook) {
     createdAt: Number(notebook.createdAt) || Number(notebook.updatedAt) || Date.now(),
     updatedAt: Number(notebook.updatedAt) || Date.now(),
     color: notebook.color || "",
+    colorTone: normalizeNotebookTone(notebook.colorTone),
     icon: notebook.icon || "book",
     important: Boolean(notebook.important),
   };
 }
 
-function createNotebookObject(title, color = "green", icon = "book") {
+function createNotebookObject(title, color = "green", icon = "book", colorTone = "standard") {
   return {
     id: crypto.randomUUID(),
     title,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     color,
+    colorTone: normalizeNotebookTone(colorTone),
     icon,
     important: false,
   };
@@ -1630,15 +1698,16 @@ function latestNoteForNotebook(notebookId) {
 function createNotebook() {
   const title = (els.notebookNameInput?.value || "").trim() || "講義ノート";
   const color = selectedCreateOption(els.notebookColorChoices, "color") || "green";
+  const colorTone = selectedCreateOption(els.notebookToneChoices, "tone") || "standard";
   const icon = selectedCreateOption(els.notebookIconChoices, "icon") || "book";
 
   if (state.editingNotebookId) {
-    updateNotebookDetails(state.editingNotebookId, { title, color, icon });
+    updateNotebookDetails(state.editingNotebookId, { title, color, colorTone, icon });
     closeNotebookCreate();
     return;
   }
 
-  const notebook = createNotebookObject(title, color, icon);
+  const notebook = createNotebookObject(title, color, icon, colorTone);
   state.notebooks = [notebook, ...state.notebooks];
   state.selectedNotebookId = notebook.id;
   state.selectedNoteId = null;
@@ -1649,7 +1718,7 @@ function createNotebook() {
 
 function openNotebookCreate() {
   state.editingNotebookId = null;
-  openNotebookForm({ title: "講義ノート", color: "green", icon: "book", mode: "create" });
+  openNotebookForm({ title: "講義ノート", color: "green", colorTone: "standard", icon: "book", mode: "create" });
 }
 
 function openNotebookEdit(notebookId) {
@@ -1660,21 +1729,26 @@ function openNotebookEdit(notebookId) {
   openNotebookForm({
     title: notebook.title || "ノートブック",
     color: notebookColorKey(notebook),
+    colorTone: notebookToneKey(notebook),
     icon: notebook.icon || "book",
     mode: "edit",
   });
 }
 
-function openNotebookForm({ title, color, icon, mode }) {
+function openNotebookForm({ title, color, colorTone, icon, mode }) {
   if (!els.notebookCreateOverlay) {
     createNotebook();
     return;
   }
 
-  renderIconChoices();
+  const nextColor = NOTEBOOK_COLOR_PALETTES[color] ? color : "green";
+  const nextTone = normalizeNotebookTone(colorTone);
+  renderColorChoices(nextColor, nextTone);
+  renderIconChoices(icon || "book");
   setNotebookFormMode(mode);
   if (els.notebookNameInput) els.notebookNameInput.value = title;
-  setCreateChoice(els.notebookColorChoices, "color", color || "green");
+  setCreateChoice(els.notebookColorChoices, "color", nextColor);
+  setCreateChoice(els.notebookToneChoices, "tone", nextTone);
   setCreateChoice(els.notebookIconChoices, "icon", icon || "book");
   updateNotebookCreatePreview();
   els.notebookCreateOverlay.hidden = false;
@@ -1717,6 +1791,7 @@ function setCreateChoice(container, key, value) {
   container.querySelectorAll("button").forEach((button) => {
     const selected = button.dataset[key] === value;
     button.classList.toggle("is-selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
     if (key === "color") button.textContent = selected ? "✓" : "";
     if (key === "icon") button.innerHTML = notebookIconSvg(button.dataset.icon);
   });
@@ -1729,6 +1804,7 @@ function updateNotebookDetails(notebookId, details) {
 
   notebook.title = details.title || notebook.title || "ノートブック";
   notebook.color = details.color || notebook.color || "green";
+  notebook.colorTone = normalizeNotebookTone(details.colorTone ?? notebook.colorTone);
   notebook.icon = details.icon || notebook.icon || "book";
   notebook.updatedAt = Date.now();
   saveToStorage();
@@ -1741,6 +1817,17 @@ function selectNotebookColor(event) {
   updateNotebookCreatePreview();
 }
 
+function selectNotebookTone(event) {
+  const button = event.target.closest("button[data-tone]");
+  if (!button) return;
+  setCreateChoice(els.notebookToneChoices, "tone", button.dataset.tone);
+  renderColorChoices(
+    selectedCreateOption(els.notebookColorChoices, "color") || "green",
+    button.dataset.tone,
+  );
+  updateNotebookCreatePreview();
+}
+
 function selectNotebookIcon(event) {
   const button = event.target.closest("button[data-icon]");
   if (!button) return;
@@ -1748,34 +1835,59 @@ function selectNotebookIcon(event) {
   updateNotebookCreatePreview();
 }
 
-function renderIconChoices() {
-  els.notebookIconChoices?.querySelectorAll("button[data-icon]").forEach((button) => {
-    button.innerHTML = notebookIconSvg(button.dataset.icon);
+function renderColorChoices(selectedColor = "green", selectedTone = "standard") {
+  if (!els.notebookColorChoices) return;
+  els.notebookColorChoices.innerHTML = "";
+  NOTEBOOK_COLOR_OPTIONS.forEach(({ key, label }) => {
+    const theme = notebookThemeFor(key, selectedTone);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "color-choice";
+    button.dataset.color = key;
+    button.setAttribute("aria-label", label);
+    button.style.setProperty("--choice-color", theme.displayAccent);
+    button.style.setProperty("--choice-ring", theme.displayAccent);
+    els.notebookColorChoices.appendChild(button);
   });
+  setCreateChoice(els.notebookColorChoices, "color", selectedColor);
+}
+
+function renderIconChoices(selectedIcon = "book") {
+  if (els.notebookIconChoices) {
+    els.notebookIconChoices.innerHTML = "";
+    NOTEBOOK_ICONS.forEach(({ key, label }) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "icon-choice";
+      button.dataset.icon = key;
+      button.setAttribute("aria-label", label);
+      button.innerHTML = notebookIconSvg(key);
+      els.notebookIconChoices.appendChild(button);
+    });
+    setCreateChoice(els.notebookIconChoices, "icon", selectedIcon);
+  }
   const previewIcon = els.notebookCreatePreview?.querySelector(".create-preview-icon");
   if (previewIcon) previewIcon.innerHTML = notebookIconSvg(previewIcon.dataset.icon || "book");
 }
 
 function notebookIconSvg(icon) {
-  const paths = {
-    book: '<path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H20v18H7.5A3.5 3.5 0 0 0 4 23.5V5.5Z"/><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H20"/><path d="M8 6h8"/>',
-    doc: '<path d="M7 3h7l5 5v13H7V3Z"/><path d="M14 3v6h5"/><path d="M10 13h6"/><path d="M10 17h5"/>',
-    bookmark: '<path d="M7 3h10v18l-5-3-5 3V3Z"/>',
-    cap: '<path d="M3 9.5 12 5l9 4.5-9 4.5-9-4.5Z"/><path d="M7 12v4.5c2.6 2 7.4 2 10 0V12"/><path d="M21 10v5"/>',
-    idea: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M8 10a4 4 0 1 1 8 0c0 2.5-2 3.3-2.5 6h-3C10 13.3 8 12.5 8 10Z"/>',
-    case: '<path d="M4 8h16v12H4V8Z"/><path d="M9 8V5h6v3"/><path d="M4 13h16"/><path d="M10 13v2h4v-2"/>',
-    folder: '<path d="M3 6h7l2 2h9v11H3V6Z"/><path d="M3 10h18"/>',
-    star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/>',
-  };
-  return `<svg class="notebook-svg-icon" viewBox="0 0 24 24" aria-hidden="true">${paths[icon] || paths.book}</svg>`;
+  const definition = NOTEBOOK_ICONS.find((item) => item.key === icon) || NOTEBOOK_ICONS[0];
+  return `<svg class="notebook-svg-icon" viewBox="0 0 24 24" aria-hidden="true">${definition.paths}</svg>`;
 }
 
 function updateNotebookCreatePreview() {
   const title = (els.notebookNameInput?.value || "").trim() || "講義ノート";
   const color = selectedCreateOption(els.notebookColorChoices, "color") || "green";
+  const colorTone = selectedCreateOption(els.notebookToneChoices, "tone") || "standard";
   const icon = selectedCreateOption(els.notebookIconChoices, "icon") || "book";
   if (els.notebookPreviewTitle) els.notebookPreviewTitle.textContent = title;
-  if (els.notebookCreatePreview) els.notebookCreatePreview.dataset.kind = color;
+  if (els.notebookCreatePreview) {
+    const theme = notebookThemeFor(color, colorTone);
+    els.notebookCreatePreview.dataset.kind = color;
+    els.notebookCreatePreview.dataset.tone = colorTone;
+    els.notebookCreatePreview.style.setProperty("--preview-accent", theme.displayAccent);
+    els.notebookCreatePreview.style.setProperty("--preview-soft", theme.soft);
+  }
   const previewIcon = els.notebookCreatePreview?.querySelector(".create-preview-icon");
   if (previewIcon) {
     previewIcon.dataset.icon = icon;
@@ -3388,8 +3500,59 @@ function notebookColorKey(notebook) {
   return ["violet", "blue", "green", "orange", "pink"][Math.abs(index) % 5];
 }
 
+function normalizeNotebookTone(tone) {
+  return NOTEBOOK_TONES.includes(tone) ? tone : "standard";
+}
+
+function notebookToneKey(notebook) {
+  return normalizeNotebookTone(notebook?.colorTone);
+}
+
+function hexToRgba(hex, alpha) {
+  const normalized = String(hex || "").replace("#", "");
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return `rgba(79, 138, 103, ${alpha})`;
+  const value = Number.parseInt(normalized, 16);
+  const red = (value >> 16) & 255;
+  const green = (value >> 8) & 255;
+  const blue = value & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function notebookThemeFor(color, tone = "standard") {
+  const normalizedTone = normalizeNotebookTone(tone);
+  const standardTheme = NOTEBOOK_STANDARD_THEMES[color];
+  const palette = NOTEBOOK_COLOR_PALETTES[color]?.[normalizedTone];
+
+  // Legacy colors such as pink keep their existing standard appearance.
+  if (!palette) {
+    const fallback = standardTheme || NOTEBOOK_STANDARD_THEMES.green;
+    return {
+      ...fallback,
+      displayAccent: fallback.accent,
+      ink: fallback.accent,
+    };
+  }
+
+  if (normalizedTone === "standard" && standardTheme) {
+    return {
+      ...standardTheme,
+      displayAccent: palette.accent,
+      ink: palette.ink,
+    };
+  }
+
+  return {
+    accent: palette.accent,
+    displayAccent: palette.accent,
+    ink: palette.ink,
+    soft: hexToRgba(palette.accent, normalizedTone === "light" ? 0.24 : 0.22),
+    border: hexToRgba(palette.accent, 0.34),
+    focus: hexToRgba(palette.accent, 0.12),
+  };
+}
+
 function notebookTheme(notebook) {
-  return NOTEBOOK_THEMES[notebookColorKey(notebook)] || NOTEBOOK_THEMES.green;
+  return notebookThemeFor(notebookColorKey(notebook), notebookToneKey(notebook));
 }
 
 function applyCurrentNotebookTheme() {
@@ -3456,8 +3619,11 @@ function showMoreRecentNotes() {
 
 function renderNotebookItem(notebook) {
   const card = document.createElement("div");
+  const theme = notebookTheme(notebook);
   card.className = "notebook-card";
   card.dataset.kind = notebookColorKey(notebook);
+  card.dataset.tone = notebookToneKey(notebook);
+  card.style.setProperty("--card-accent", theme.displayAccent);
   card.setAttribute("role", "button");
   card.tabIndex = 0;
   card.classList.toggle("is-active", notebook.id === state.selectedNotebookId);
@@ -3654,9 +3820,13 @@ function renderRecentNoteItem(note) {
   const tags = node.querySelector(".recent-note-tags");
   const notebook = state.notebooks.find((item) => item.id === note.notebookId);
   if (notebook) {
+    const theme = notebookTheme(notebook);
     const chip = document.createElement("span");
     chip.className = "recent-chip";
     chip.dataset.kind = notebookColorKey(notebook);
+    chip.dataset.tone = notebookToneKey(notebook);
+    chip.style.setProperty("--notebook-soft", theme.soft);
+    chip.style.setProperty("--notebook-ink", theme.ink);
     chip.textContent = notebook.title;
     tags.appendChild(chip);
   }

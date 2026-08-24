@@ -106,34 +106,29 @@
 
             <fieldset class="create-fieldset">
               <legend>ノートの色 <strong>*</strong></legend>
-              <div id="notebookColorChoices" class="color-choice-row">
-                <button class="color-choice is-selected" type="button" data-color="green" aria-label="緑">✓</button>
-                <button class="color-choice" type="button" data-color="blue" aria-label="青"></button>
-                <button class="color-choice" type="button" data-color="violet" aria-label="紫"></button>
-                <button class="color-choice" type="button" data-color="orange" aria-label="黄"></button>
-                <button class="color-choice" type="button" data-color="coral" aria-label="赤"></button>
-                <button class="color-choice" type="button" data-color="gray" aria-label="灰"></button>
+              <div class="choice-section">
+                <span class="choice-label">カラー</span>
+                <div id="notebookColorChoices" class="color-choice-row" aria-label="ベースカラー"></div>
+              </div>
+              <div class="choice-section">
+                <span class="choice-label">濃さ</span>
+                <div id="notebookToneChoices" class="tone-choice-row" aria-label="色の濃さ">
+                  <button class="tone-choice" type="button" data-tone="light" aria-pressed="false">淡い</button>
+                  <button class="tone-choice is-selected" type="button" data-tone="standard" aria-pressed="true">標準</button>
+                  <button class="tone-choice" type="button" data-tone="deep" aria-pressed="false">濃い</button>
+                </div>
               </div>
             </fieldset>
 
             <fieldset class="create-fieldset">
               <legend>アイコン <strong>*</strong></legend>
-              <div id="notebookIconChoices" class="icon-choice-row">
-                <button class="icon-choice is-selected" type="button" data-icon="book" aria-label="本"></button>
-                <button class="icon-choice" type="button" data-icon="doc" aria-label="書類"></button>
-                <button class="icon-choice" type="button" data-icon="bookmark" aria-label="しおり"></button>
-                <button class="icon-choice" type="button" data-icon="cap" aria-label="学習"></button>
-                <button class="icon-choice" type="button" data-icon="idea" aria-label="アイデア"></button>
-                <button class="icon-choice" type="button" data-icon="case" aria-label="ケース"></button>
-                <button class="icon-choice" type="button" data-icon="folder" aria-label="フォルダ"></button>
-                <button class="icon-choice" type="button" data-icon="star" aria-label="星"></button>
-              </div>
+              <div id="notebookIconChoices" class="icon-choice-row" aria-label="アイコン"></div>
             </fieldset>
           </div>
 
           <div class="create-preview-side">
             <h2>プレビュー</h2>
-            <div id="notebookCreatePreview" class="create-preview-card" data-kind="green">
+            <div id="notebookCreatePreview" class="create-preview-card" data-kind="green" data-tone="standard">
               <div class="create-preview-accent"></div>
               <div class="create-preview-icon" data-icon="book"></div>
               <div class="create-preview-body">
