@@ -113,6 +113,7 @@ state.oneDriveSyncing = false;
 state.applyingOneDriveState = false;
 state.microsoftRefreshTimer = null;
 state.microsoftRefreshPromise = null;
+state.oneDriveFailure = null;
 
 const els = {
   newNotebookBtn: document.getElementById("newNotebookBtn"),
@@ -181,6 +182,13 @@ const els = {
   accountDialogTitle: document.getElementById("accountDialogTitle"),
   closeAccountMenuBtn: document.getElementById("closeAccountMenuBtn"),
   switchAccountBtn: document.getElementById("switchAccountBtn"),
+  syncHelpOverlay: document.getElementById("syncHelpOverlay"),
+  syncHelpDescription: document.getElementById("syncHelpDescription"),
+  syncHelpSteps: document.getElementById("syncHelpSteps"),
+  syncHelpFeedback: document.getElementById("syncHelpFeedback"),
+  syncHelpActionBtn: document.getElementById("syncHelpActionBtn"),
+  closeSyncHelpBtn: document.getElementById("closeSyncHelpBtn"),
+  dismissSyncHelpBtn: document.getElementById("dismissSyncHelpBtn"),
 };
 
 applySavedTheme();
@@ -286,8 +294,15 @@ function wireAuthEvents() {
   els.accountMenuBtn?.addEventListener("click", openAccountMenu);
   els.closeAccountMenuBtn?.addEventListener("click", closeAccountMenu);
   els.switchAccountBtn?.addEventListener("click", switchMicrosoftAccount);
+  els.oneDriveStatusLabel?.addEventListener("click", openSyncHelp);
+  els.closeSyncHelpBtn?.addEventListener("click", closeSyncHelp);
+  els.dismissSyncHelpBtn?.addEventListener("click", closeSyncHelp);
+  els.syncHelpActionBtn?.addEventListener("click", handleSyncHelpAction);
   els.accountOverlay?.addEventListener("click", (event) => {
     if (event.target === els.accountOverlay) closeAccountMenu();
+  });
+  els.syncHelpOverlay?.addEventListener("click", (event) => {
+    if (event.target === els.syncHelpOverlay) closeSyncHelp();
   });
   window.addEventListener("online", reconnectMicrosoftInBackground);
   document.addEventListener("visibilitychange", () => {
@@ -549,6 +564,7 @@ function handleGlobalKeys(event) {
     closeMenu();
     closeToolbarMoreMenu();
     closeAccountMenu();
+    closeSyncHelp();
   }
 }
 
@@ -711,6 +727,73 @@ function closeAccountMenu() {
   if (!els.accountOverlay) return;
   els.accountOverlay.hidden = true;
   els.accountMenuBtn?.setAttribute("aria-expanded", "false");
+}
+
+function openSyncHelp() {
+  if (!els.syncHelpOverlay || document.body.dataset.oneDriveStatusKind !== "error") return;
+  renderSyncHelp();
+  els.syncHelpOverlay.hidden = false;
+  els.oneDriveStatusLabel?.setAttribute("aria-expanded", "true");
+  els.syncHelpActionBtn?.focus();
+}
+
+function closeSyncHelp() {
+  if (!els.syncHelpOverlay || els.syncHelpOverlay.hidden) return;
+  els.syncHelpOverlay.hidden = true;
+  els.oneDriveStatusLabel?.setAttribute("aria-expanded", "false");
+  if (els.oneDriveStatusLabel && !els.oneDriveStatusLabel.disabled) {
+    els.oneDriveStatusLabel.focus();
+  } else {
+    els.accountMenuBtn?.focus();
+  }
+}
+
+function renderSyncHelp() {
+  const failure = state.oneDriveFailure || defaultOneDriveFailureDetails();
+  if (els.syncHelpDescription) els.syncHelpDescription.textContent = failure.description;
+  if (els.syncHelpSteps) {
+    els.syncHelpSteps.replaceChildren(...failure.steps.map((step) => {
+      const item = document.createElement("li");
+      item.textContent = step;
+      return item;
+    }));
+  }
+  if (els.syncHelpFeedback) els.syncHelpFeedback.textContent = "";
+  if (els.syncHelpActionBtn) {
+    els.syncHelpActionBtn.textContent = failure.action === "reconnect" ? "Microsoftへ再接続" : "もう一度同期";
+    els.syncHelpActionBtn.disabled = false;
+  }
+}
+
+async function handleSyncHelpAction() {
+  const failure = state.oneDriveFailure || defaultOneDriveFailureDetails();
+  if (failure.action === "reconnect") {
+    closeSyncHelp();
+    await switchMicrosoftAccount();
+    return;
+  }
+
+  if (!navigator.onLine) {
+    if (els.syncHelpFeedback) els.syncHelpFeedback.textContent = "まだインターネットに接続されていません。接続後にもう一度お試しください。";
+    return;
+  }
+
+  if (els.syncHelpActionBtn) {
+    els.syncHelpActionBtn.disabled = true;
+    els.syncHelpActionBtn.textContent = "同期中...";
+  }
+  if (els.syncHelpFeedback) els.syncHelpFeedback.textContent = "OneDriveとの接続を確認しています。";
+
+  await syncOneDrive({ preferCloud: true });
+
+  if (document.body.dataset.oneDriveStatusKind === "error") {
+    renderSyncHelp();
+    if (els.syncHelpFeedback) els.syncHelpFeedback.textContent = "まだ同期できませんでした。上の手順を確認してください。";
+    return;
+  }
+
+  if (els.syncHelpFeedback) els.syncHelpFeedback.textContent = "同期が復活しました。";
+  window.setTimeout(closeSyncHelp, 650);
 }
 
 function requireMicrosoftRelogin(message = "再ログインが必要です") {
@@ -1465,12 +1548,14 @@ async function createOneDriveError(response) {
 
 
 function handleOneDriveFailure(error) {
+  const failure = oneDriveFailureDetails(error);
   const message = oneDriveErrorMessage(error);
   if (message === "再ログインが必要です") {
+    state.oneDriveFailure = failure;
     requireMicrosoftRelogin(message);
     return;
   }
-  setOneDriveStatus(message, true);
+  setOneDriveStatus(message, true, failure);
 }
 function oneDriveErrorMessage(error) {
   if (error?.status === 401) return "再ログインが必要です";
@@ -1478,12 +1563,61 @@ function oneDriveErrorMessage(error) {
   return "同期に失敗しました";
 }
 
+function oneDriveFailureDetails(error) {
+  const message = String(error?.message || "").toLowerCase();
+  if (!navigator.onLine || error instanceof TypeError || message.includes("fetch") || message.includes("network")) {
+    return {
+      description: "インターネット接続が途切れたため、OneDriveへ到達できなかった可能性があります。ノートはこの端末には残っています。",
+      steps: ["Wi-Fiやインターネット接続を確認します。", "接続が戻ったら「もう一度同期」を押します。"],
+      action: "retry",
+    };
+  }
+  if (error?.status === 401) {
+    return {
+      description: "Microsoftとの接続期限が切れたため、OneDriveを利用できない状態です。",
+      steps: ["「Microsoftへ再接続」を押します。", "保存先に使用しているMicrosoftアカウントでログインします。"],
+      action: "reconnect",
+    };
+  }
+  if (error?.status === 403) {
+    return {
+      description: "Microsoftアカウントから、OneDriveへノートを保存する許可を得られませんでした。",
+      steps: ["OneDriveを利用できるアカウントか確認します。", "「Microsoftへ再接続」を押し、アクセスを許可します。"],
+      action: "reconnect",
+    };
+  }
+  if (message.includes("保存データを読み取れません")) {
+    return {
+      description: "OneDrive上の保存データを安全に読み取れなかったため、上書きを止めています。端末側のノートは保持されています。",
+      steps: ["まず「もう一度同期」を押します。", "繰り返し失敗する場合は、そのまま編集を続けずデータの確認が必要です。"],
+      action: "retry",
+    };
+  }
+  if (error?.status === 429 || Number(error?.status) >= 500) {
+    return {
+      description: "Microsoft側が一時的に混み合っているか、サービスが応答していません。",
+      steps: ["少し待ってから「もう一度同期」を押します。", "直らない場合はインターネット接続も確認します。"],
+      action: "retry",
+    };
+  }
+  return defaultOneDriveFailureDetails();
+}
+
+function defaultOneDriveFailureDetails() {
+  return {
+    description: "OneDriveとの通信を完了できませんでした。ノートはこの端末には残っています。",
+    steps: ["インターネット接続を確認します。", "「もう一度同期」を押します。", "改善しない場合はMicrosoftアカウントへ再接続します。"],
+    action: "retry",
+  };
+}
+
 function setOneDriveBusy(isBusy, message = "") {
   document.body.classList.toggle("is-onedrive-busy", Boolean(isBusy));
   if (message) setOneDriveStatus(message);
 }
 
-function setOneDriveStatus(message, isError = false) {
+function setOneDriveStatus(message, isError = false, failure = null) {
+  state.oneDriveFailure = isError ? failure || defaultOneDriveFailureDetails() : null;
   document.body.dataset.oneDriveStatus = message || "";
   document.body.dataset.oneDriveStatusKind = isError ? "error" : "normal";
   updateOneDriveStatusLabel();
@@ -1494,6 +1628,9 @@ function updateOneDriveStatusLabel() {
   if (!activeUser) {
     els.oneDriveStatusLabel.textContent = "";
     els.oneDriveStatusLabel.dataset.kind = "normal";
+    els.oneDriveStatusLabel.disabled = true;
+    els.oneDriveStatusLabel.removeAttribute("aria-haspopup");
+    els.oneDriveStatusLabel.removeAttribute("aria-expanded");
     return;
   }
 
@@ -1506,6 +1643,16 @@ function updateOneDriveStatusLabel() {
   const isError = document.body.dataset.oneDriveStatusKind === "error";
   els.oneDriveStatusLabel.textContent = message;
   els.oneDriveStatusLabel.dataset.kind = isError ? "error" : "normal";
+  els.oneDriveStatusLabel.disabled = !isError;
+  if (isError) {
+    els.oneDriveStatusLabel.setAttribute("aria-haspopup", "dialog");
+    els.oneDriveStatusLabel.setAttribute("aria-expanded", String(!els.syncHelpOverlay?.hidden));
+    els.oneDriveStatusLabel.title = "クリックして原因と復旧方法を確認";
+  } else {
+    els.oneDriveStatusLabel.removeAttribute("aria-haspopup");
+    els.oneDriveStatusLabel.removeAttribute("aria-expanded");
+    els.oneDriveStatusLabel.removeAttribute("title");
+  }
 }
 
 function readStoredState() {
@@ -2185,9 +2332,15 @@ function handleEditorPaste(event) {
   const shouldKeepFormatting = state.pasteRichOnce || (event.shiftKey && (event.ctrlKey || event.metaKey));
   state.pasteRichOnce = false;
   updateRichPasteButtonState();
+  setAIFormatStatus("", "");
 
   if (shouldKeepFormatting) {
     const html = event.clipboardData?.getData("text/html") || "";
+    const plainText = event.clipboardData?.getData("text/plain") || "";
+    if (looksLikeStructuredMarkdown(plainText)) {
+      insertMarkdownAtSelection(plainText);
+      return;
+    }
     if (html) {
       insertRichHtmlAtSelection(html);
       return;
@@ -2216,9 +2369,26 @@ function updateRichPasteButtonState() {
 function insertRichHtmlAtSelection(html) {
   if (!els.bodyInput || els.bodyInput.getAttribute("aria-disabled") === "true") return;
   const fragment = createSafeRichFragment(html);
-  insertFragmentAtEditorSelection(fragment);
+  insertFragmentAtEditorSelection(fragment, { structured: true });
   updateCurrentNoteFromEditor();
   saveToStorage();
+}
+
+function insertMarkdownAtSelection(markdown) {
+  if (!els.bodyInput || els.bodyInput.getAttribute("aria-disabled") === "true") return;
+  const fragment = createMarkdownFragment(markdown, { imported: true });
+  insertFragmentAtEditorSelection(fragment, { structured: true });
+  updateCurrentNoteFromEditor();
+  saveToStorage();
+}
+
+function looksLikeStructuredMarkdown(text) {
+  const value = String(text || "");
+  return (
+    /^#{1,3}\s+\S/m.test(value) ||
+    /^\s*\|.+\|\s*\n\s*\|?\s*:?-{3,}/m.test(value) ||
+    /\*\*[^*]+\*\*/.test(value)
+  );
 }
 
 function handleEditorIndentKey(event) {
@@ -2329,7 +2499,13 @@ function isEmptyEditorBlock(block) {
 
 function resetParagraphTextSize(block) {
   if (!block) return;
+  const wasImportedHeading = block.classList.contains("rich-paste-heading");
   delete block.dataset.size;
+  delete block.dataset.headingLevel;
+  block.classList.remove("rich-paste-heading");
+  if (wasImportedHeading && block.style.fontWeight === "800") {
+    block.style.removeProperty("font-weight");
+  }
   block.querySelectorAll("[data-size]").forEach((node) => {
     node.removeAttribute("data-size");
   });
@@ -2381,6 +2557,10 @@ function createSafeRichFragment(html) {
 
 function appendSanitizedRichNode(parent, node) {
   if (node.nodeType === Node.TEXT_NODE) {
+    const parentTag = parent.nodeType === Node.ELEMENT_NODE ? parent.tagName : "";
+    if (!(node.textContent || "").trim() && (!parentTag || ["TABLE", "THEAD", "TBODY", "TFOOT", "TR", "COLGROUP"].includes(parentTag))) {
+      return;
+    }
     parent.appendChild(document.createTextNode(node.textContent || ""));
     return;
   }
@@ -2394,8 +2574,10 @@ function appendSanitizedRichNode(parent, node) {
 
   if (["script", "style", "iframe", "object", "embed", "meta", "link"].includes(tag)) return;
 
-  const mappedTag = richPasteTagName(tag);
+  let mappedTag = richPasteTagName(tag, (node.getAttribute("role") || "").toLowerCase());
+  if (mappedTag === "span" && node.querySelector("table, [role='table']")) mappedTag = "div";
   const element = document.createElement(mappedTag);
+  applyRichPasteStructure(node, element, tag, mappedTag);
   copySafeRichStyles(node, element);
 
   Array.from(node.childNodes).forEach((child) => appendSanitizedRichNode(element, child));
@@ -2406,7 +2588,17 @@ function appendSanitizedRichNode(parent, node) {
   parent.appendChild(element);
 }
 
-function richPasteTagName(tag) {
+function richPasteTagName(tag, role = "") {
+  const roleTags = {
+    table: "table",
+    rowgroup: "tbody",
+    row: "tr",
+    columnheader: "th",
+    rowheader: "th",
+    cell: "td",
+  };
+  if (roleTags[role]) return roleTags[role];
+
   const allowed = {
     b: "strong",
     strong: "strong",
@@ -2419,18 +2611,57 @@ function richPasteTagName(tag) {
     font: "span",
     span: "span",
     p: "p",
-    div: "p",
-    h1: "div",
-    h2: "div",
-    h3: "div",
+    div: "div",
+    h1: "p",
+    h2: "p",
+    h3: "p",
+    h4: "p",
+    h5: "p",
+    h6: "p",
     ul: "ul",
     ol: "ol",
     li: "li",
     blockquote: "p",
     code: "span",
-    pre: "p",
+    pre: "pre",
+    table: "table",
+    thead: "thead",
+    tbody: "tbody",
+    tfoot: "tfoot",
+    tr: "tr",
+    th: "th",
+    td: "td",
+    colgroup: "colgroup",
+    col: "col",
   };
   return allowed[tag] || "span";
+}
+
+function applyRichPasteStructure(source, target, sourceTag, mappedTag) {
+  if (/^h[1-6]$/.test(sourceTag)) {
+    const headingLevel = Number(sourceTag.slice(1));
+    target.classList.add("rich-paste-heading");
+    target.dataset.headingLevel = String(Math.min(3, headingLevel));
+    target.dataset.size = headingLevel === 1 ? "3" : "2";
+    target.dataset.indentLevel = "0";
+  }
+
+  if (mappedTag === "table") target.classList.add("rich-paste-table");
+  if (mappedTag === "th") target.style.fontWeight = "800";
+  if (sourceTag === "div" && !source.querySelector(":scope > p, :scope > div, :scope > h1, :scope > h2, :scope > h3, :scope > ul, :scope > ol, :scope > table")) {
+    target.classList.add("rich-paste-block");
+  }
+  if (sourceTag === "blockquote") target.classList.add("rich-paste-quote");
+  if (sourceTag === "code") target.classList.add("rich-paste-code");
+
+  if (["th", "td"].includes(mappedTag)) {
+    ["colspan", "rowspan"].forEach((attribute) => {
+      const value = Number(source.getAttribute(attribute));
+      if (Number.isInteger(value) && value > 1 && value <= 20) {
+        target.setAttribute(attribute, String(value));
+      }
+    });
+  }
 }
 
 function copySafeRichStyles(source, target) {
@@ -2441,7 +2672,7 @@ function copySafeRichStyles(source, target) {
 
   const style = source.style;
   const fontWeight = style.fontWeight || "";
-  if (fontWeight === "bold" || Number(fontWeight) >= 600) {
+  if (/^h[1-6]$/.test(tag) || tag === "th" || fontWeight === "bold" || Number(fontWeight) >= 600) {
     target.style.fontWeight = "800";
   }
   if (style.textDecorationLine.includes("underline") || style.textDecoration.includes("underline")) {
@@ -2457,6 +2688,9 @@ function copySafeRichStyles(source, target) {
   if (style.textTransform === "uppercase") {
     target.style.textTransform = "uppercase";
   }
+  if (["left", "center", "right", "justify"].includes(style.textAlign)) {
+    target.style.textAlign = style.textAlign;
+  }
 }
 
 function richPasteTextSize(source) {
@@ -2464,8 +2698,8 @@ function richPasteTextSize(source) {
   if (["1", "2", "3"].includes(existingSize)) return existingSize;
 
   const tag = source.tagName.toLowerCase();
-  if (tag === "h1" || tag === "h2") return "3";
-  if (tag === "h3") return "2";
+  if (tag === "h1") return "3";
+  if (tag === "h2" || tag === "h3") return "2";
 
   const legacyFontSize = source.getAttribute("size");
   if (tag === "font" && legacyFontSize) {
@@ -2511,62 +2745,177 @@ function cssFontSizeToPixels(value) {
   return 0;
 }
 
-function createMarkdownFragment(markdown) {
+function createMarkdownFragment(markdown, options = {}) {
   const fragment = document.createDocumentFragment();
   const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const imported = options.imported === true;
   let list = null;
+  let listType = "";
 
-  lines.forEach((rawLine) => {
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
     const line = rawLine.trimEnd();
     const trimmed = line.trim();
 
     if (!trimmed) {
       list = null;
-      fragment.appendChild(document.createElement("br"));
-      return;
+      listType = "";
+      if (fragment.lastChild?.nodeName !== "BR") fragment.appendChild(document.createElement("br"));
+      continue;
+    }
+
+    if (isMarkdownTableRow(trimmed) && isMarkdownTableSeparator(lines[index + 1] || "")) {
+      list = null;
+      listType = "";
+      const headerCells = parseMarkdownTableCells(trimmed);
+      const rows = [];
+      index += 2;
+      while (index < lines.length && isMarkdownTableRow(lines[index].trim())) {
+        rows.push(parseMarkdownTableCells(lines[index]));
+        index += 1;
+      }
+      index -= 1;
+      fragment.appendChild(createMarkdownTable(headerCells, rows));
+      continue;
     }
 
     const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (heading) {
       list = null;
-      const block = document.createElement("div");
+      listType = "";
+      const block = document.createElement("p");
+      block.classList.add("rich-paste-heading");
+      block.dataset.headingLevel = String(heading[1].length);
       block.dataset.size = heading[1].length === 1 ? "3" : "2";
       block.dataset.indentLevel = "0";
       appendInlineMarkdown(block, heading[2]);
       fragment.appendChild(block);
-      return;
+      continue;
     }
 
-    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-    if (bullet) {
-      if (!list) {
-        list = document.createElement("ul");
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      list = null;
+      listType = "";
+      const divider = document.createElement("hr");
+      divider.className = "rich-paste-divider";
+      fragment.appendChild(divider);
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*+]\s+(.+)$/);
+    const ordered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (bullet || ordered) {
+      const nextListType = ordered ? "ol" : "ul";
+      if (!list || listType !== nextListType) {
+        list = document.createElement(nextListType);
+        listType = nextListType;
         fragment.appendChild(list);
       }
       const item = document.createElement("li");
-      item.dataset.indentLevel = "2";
-      appendInlineMarkdown(item, bullet[1]);
+      if (!imported) item.dataset.indentLevel = "2";
+      appendInlineMarkdown(item, (bullet || ordered)[1]);
       list.appendChild(item);
-      return;
+      continue;
+    }
+
+    const quote = trimmed.match(/^>\s?(.*)$/);
+    if (quote) {
+      list = null;
+      listType = "";
+      const paragraph = document.createElement("p");
+      paragraph.className = "rich-paste-quote";
+      if (!imported) paragraph.dataset.indentLevel = "2";
+      appendInlineMarkdown(paragraph, quote[1]);
+      fragment.appendChild(paragraph);
+      continue;
     }
 
     list = null;
+    listType = "";
     const paragraph = document.createElement("p");
-    paragraph.dataset.indentLevel = "1";
+    if (!imported) paragraph.dataset.indentLevel = "1";
     appendInlineMarkdown(paragraph, trimmed);
     fragment.appendChild(paragraph);
-  });
+  }
 
   return fragment;
 }
 
+function isMarkdownTableRow(line) {
+  const value = String(line || "").trim();
+  return value.includes("|") && /^\|?.+\|?$/.test(value);
+}
+
+function isMarkdownTableSeparator(line) {
+  const cells = parseMarkdownTableCells(line);
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s/g, "")));
+}
+
+function parseMarkdownTableCells(line) {
+  let value = String(line || "").trim();
+  if (value.startsWith("|")) value = value.slice(1);
+  if (value.endsWith("|")) value = value.slice(0, -1);
+
+  const cells = [];
+  let cell = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (character === "\\" && value[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+    } else if (character === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function createMarkdownTable(headerCells, rows) {
+  const table = document.createElement("table");
+  table.className = "rich-paste-table";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headerCells.forEach((text) => {
+    const cell = document.createElement("th");
+    appendInlineMarkdown(cell, text);
+    headRow.appendChild(cell);
+  });
+  head.appendChild(headRow);
+  table.appendChild(head);
+
+  const body = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tableRow = document.createElement("tr");
+    headerCells.forEach((_, index) => {
+      const cell = document.createElement("td");
+      appendInlineMarkdown(cell, row[index] || "");
+      tableRow.appendChild(cell);
+    });
+    body.appendChild(tableRow);
+  });
+  table.appendChild(body);
+  return table;
+}
+
 function appendInlineMarkdown(parent, text) {
-  String(text || "").split(/(\*\*[^*]+\*\*)/g).forEach((part) => {
-    const bold = part.match(/^\*\*([^*]+)\*\*$/);
+  String(text || "").split(/(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`)/g).forEach((part) => {
+    const bold = part.match(/^(?:\*\*([^*]+)\*\*|__([^_]+)__)$/);
     if (bold) {
       const strong = document.createElement("strong");
-      strong.textContent = bold[1];
+      strong.textContent = bold[1] || bold[2];
       parent.appendChild(strong);
+      return;
+    }
+    const code = part.match(/^`([^`]+)`$/);
+    if (code) {
+      const inlineCode = document.createElement("span");
+      inlineCode.className = "rich-paste-code";
+      inlineCode.textContent = code[1];
+      parent.appendChild(inlineCode);
       return;
     }
     parent.appendChild(document.createTextNode(part));
@@ -3296,7 +3645,7 @@ function insertNodeAtEditorSelection(node) {
   selection?.addRange(nextRange);
 }
 
-function insertFragmentAtEditorSelection(fragment) {
+function insertFragmentAtEditorSelection(fragment, options = {}) {
   els.bodyInput.focus();
   const lastNode = fragment.lastChild;
   if (!lastNode) return;
@@ -3307,7 +3656,16 @@ function insertFragmentAtEditorSelection(fragment) {
   } else {
     const range = selection.getRangeAt(0);
     range.deleteContents();
-    range.insertNode(fragment);
+    const topLevelNode = options.structured ? topLevelEditorNode(range.startContainer) : null;
+    if (topLevelNode) {
+      if (isEmptyStructuredPasteAnchor(topLevelNode)) {
+        topLevelNode.replaceWith(fragment);
+      } else {
+        topLevelNode.after(fragment);
+      }
+    } else {
+      range.insertNode(fragment);
+    }
   }
 
   const nextRange = document.createRange();
@@ -3315,6 +3673,19 @@ function insertFragmentAtEditorSelection(fragment) {
   nextRange.collapse(true);
   selection?.removeAllRanges();
   selection?.addRange(nextRange);
+}
+
+function topLevelEditorNode(node) {
+  let element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+  while (element && element.parentElement && element.parentElement !== els.bodyInput) {
+    element = element.parentElement;
+  }
+  return element?.parentElement === els.bodyInput ? element : null;
+}
+
+function isEmptyStructuredPasteAnchor(node) {
+  if (!node || !["P", "DIV"].includes(node.tagName)) return false;
+  return !(node.textContent || "").replace(/[\u200b\u00a0]/g, "").trim() && !node.querySelector("img, table, ul, ol, .note-image");
 }
 
 function applyTextSize(size) {

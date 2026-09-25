@@ -41,7 +41,7 @@
           <button id="accountMenuBtn" class="account-menu-button" type="button" aria-haspopup="dialog" aria-expanded="false">
             <span id="currentUserLabel"></span>
           </button>
-          <p id="oneDriveStatusLabel" class="sync-status" aria-live="polite"></p>
+          <button id="oneDriveStatusLabel" class="sync-status" type="button" aria-live="polite" disabled></button>
         </div>
       </aside>
 
@@ -127,6 +127,24 @@
         <div class="account-dialog-actions">
           <button id="switchAccountBtn" class="account-dialog-button" type="button">別のアカウントでログイン</button>
           <button id="logoutBtn" class="account-dialog-button danger" type="button">ログアウト</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="syncHelpOverlay" class="account-overlay" hidden>
+      <section class="account-dialog sync-help-dialog" role="dialog" aria-modal="true" aria-labelledby="syncHelpTitle" aria-describedby="syncHelpDescription">
+        <button id="closeSyncHelpBtn" class="account-dialog-close" type="button" aria-label="閉じる">×</button>
+        <p class="account-dialog-label">OneDrive 同期</p>
+        <h2 id="syncHelpTitle" class="sync-help-title">同期を復活させるには</h2>
+        <p id="syncHelpDescription" class="sync-help-description"></p>
+        <div class="sync-help-next">
+          <p>次にすること</p>
+          <ol id="syncHelpSteps"></ol>
+        </div>
+        <p id="syncHelpFeedback" class="sync-help-feedback" aria-live="polite"></p>
+        <div class="sync-help-actions">
+          <button id="syncHelpActionBtn" class="primary-button" type="button">もう一度同期</button>
+          <button id="dismissSyncHelpBtn" class="ghost-button" type="button">閉じる</button>
         </div>
       </section>
     </div>
