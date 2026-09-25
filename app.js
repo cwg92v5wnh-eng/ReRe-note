@@ -114,6 +114,8 @@ state.applyingOneDriveState = false;
 state.microsoftRefreshTimer = null;
 state.microsoftRefreshPromise = null;
 state.oneDriveFailure = null;
+state.oneDriveAppRootId = "";
+state.oneDriveAppRootPromise = null;
 
 const els = {
   newNotebookBtn: document.getElementById("newNotebookBtn"),
@@ -1158,6 +1160,8 @@ function clearMicrosoftToken() {
   window.clearTimeout(state.microsoftRefreshTimer);
   state.microsoftRefreshTimer = null;
   state.microsoftRefreshPromise = null;
+  state.oneDriveAppRootId = "";
+  state.oneDriveAppRootPromise = null;
   try {
     sessionStorage.removeItem(MICROSOFT_TOKEN_KEY);
     sessionStorage.removeItem(MICROSOFT_AUTH_VERIFIER_KEY);
@@ -1439,7 +1443,8 @@ async function syncOneDrive({ preferCloud = false } = {}) {
 }
 
 async function downloadStateFromOneDrive() {
-  const response = await graphFetch(oneDriveContentUrl());
+  const appRootId = await getOneDriveAppRootId();
+  const response = await graphFetch(oneDriveContentUrl(appRootId));
   if (response.status === 404) return null;
   if (!response.ok) throw await createOneDriveError(response, "download");
 
@@ -1466,7 +1471,8 @@ async function uploadStateToOneDrive(options = {}) {
   window.clearTimeout(state.oneDriveSaveTimer);
 
   try {
-    const response = await graphFetch(oneDriveContentUrl(), {
+    const appRootId = await getOneDriveAppRootId();
+    const response = await graphFetch(oneDriveContentUrl(appRootId), {
       method: "PUT",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: serializedState(),
@@ -1549,8 +1555,35 @@ function serializedState() {
   });
 }
 
-function oneDriveContentUrl() {
-  return `https://graph.microsoft.com/v1.0/me/drive/special/approot:/${encodeURIComponent(ONEDRIVE_STATE_FILE)}:/content`;
+async function getOneDriveAppRootId() {
+  if (state.oneDriveAppRootId) return state.oneDriveAppRootId;
+  if (state.oneDriveAppRootPromise) return state.oneDriveAppRootPromise;
+
+  state.oneDriveAppRootPromise = (async () => {
+    const response = await graphFetch("https://graph.microsoft.com/v1.0/me/drive/special/approot?$select=id");
+    if (!response.ok) throw await createOneDriveError(response, "prepare");
+    const payload = await response.json().catch(() => ({}));
+    const appRootId = String(payload.id || "").trim();
+    if (!appRootId) {
+      const error = new Error("OneDriveの保存先を準備できませんでした。");
+      error.operation = "prepare";
+      error.codes = ["invalidAppRoot"];
+      error.code = "invalidAppRoot";
+      throw error;
+    }
+    state.oneDriveAppRootId = appRootId;
+    return appRootId;
+  })();
+
+  try {
+    return await state.oneDriveAppRootPromise;
+  } finally {
+    state.oneDriveAppRootPromise = null;
+  }
+}
+
+function oneDriveContentUrl(appRootId) {
+  return `https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(appRootId)}:/${encodeURIComponent(ONEDRIVE_STATE_FILE)}:/content`;
 }
 
 async function createOneDriveError(response, operation = "sync") {
@@ -1688,6 +1721,7 @@ function normalizedOneDriveErrorCodes(error) {
 
 function oneDriveDiagnosticLabel(error) {
   const parts = [];
+  if (error?.operation === "prepare") parts.push("保存先準備");
   if (error?.operation === "download") parts.push("読込");
   if (error?.operation === "upload") parts.push("保存");
   if (Number.isFinite(Number(error?.status))) parts.push(`HTTP ${Number(error.status)}`);
