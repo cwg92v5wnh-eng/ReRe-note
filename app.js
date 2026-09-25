@@ -184,6 +184,7 @@ const els = {
   switchAccountBtn: document.getElementById("switchAccountBtn"),
   syncHelpOverlay: document.getElementById("syncHelpOverlay"),
   syncHelpDescription: document.getElementById("syncHelpDescription"),
+  syncHelpDiagnostic: document.getElementById("syncHelpDiagnostic"),
   syncHelpSteps: document.getElementById("syncHelpSteps"),
   syncHelpFeedback: document.getElementById("syncHelpFeedback"),
   syncHelpActionBtn: document.getElementById("syncHelpActionBtn"),
@@ -751,6 +752,10 @@ function closeSyncHelp() {
 function renderSyncHelp() {
   const failure = state.oneDriveFailure || defaultOneDriveFailureDetails();
   if (els.syncHelpDescription) els.syncHelpDescription.textContent = failure.description;
+  if (els.syncHelpDiagnostic) {
+    els.syncHelpDiagnostic.textContent = failure.diagnostic || "";
+    els.syncHelpDiagnostic.hidden = !failure.diagnostic;
+  }
   if (els.syncHelpSteps) {
     els.syncHelpSteps.replaceChildren(...failure.steps.map((step) => {
       const item = document.createElement("li");
@@ -1436,13 +1441,23 @@ async function syncOneDrive({ preferCloud = false } = {}) {
 async function downloadStateFromOneDrive() {
   const response = await graphFetch(oneDriveContentUrl());
   if (response.status === 404) return null;
-  if (!response.ok) throw await createOneDriveError(response);
+  if (!response.ok) throw await createOneDriveError(response, "download");
 
-  const payload = await response.json();
+  const payload = await response.json().catch(() => {
+    throw createOneDriveDataError();
+  });
   if (!payload || !Array.isArray(payload.notebooks) || !Array.isArray(payload.notes)) {
-    throw new Error("OneDriveの保存データを読み取れませんでした。");
+    throw createOneDriveDataError();
   }
   return payload;
+}
+
+function createOneDriveDataError() {
+  const error = new Error("OneDriveの保存データを読み取れませんでした。");
+  error.operation = "download";
+  error.codes = ["invalidStoredData"];
+  error.code = "invalidStoredData";
+  return error;
 }
 
 async function uploadStateToOneDrive(options = {}) {
@@ -1456,7 +1471,7 @@ async function uploadStateToOneDrive(options = {}) {
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: serializedState(),
     });
-    if (!response.ok) throw await createOneDriveError(response);
+    if (!response.ok) throw await createOneDriveError(response, "upload");
     setOneDriveStatus("OneDriveに保存済み");
   } catch (error) {
     console.warn("OneDrive save error:", error);
@@ -1538,12 +1553,27 @@ function oneDriveContentUrl() {
   return `https://graph.microsoft.com/v1.0/me/drive/special/approot:/${encodeURIComponent(ONEDRIVE_STATE_FILE)}:/content`;
 }
 
-async function createOneDriveError(response) {
+async function createOneDriveError(response, operation = "sync") {
   const payload = await response.json().catch(() => ({}));
-  const message = payload.error?.message || `OneDrive request failed (${response.status})`;
+  const graphError = payload.error || {};
+  const message = graphError.message || `OneDrive request failed (${response.status})`;
   const error = new Error(message);
   error.status = response.status;
+  error.codes = collectOneDriveErrorCodes(graphError);
+  error.code = error.codes.at(-1) || "";
+  error.operation = operation;
   return error;
+}
+
+function collectOneDriveErrorCodes(graphError) {
+  const codes = [];
+  let current = graphError;
+  while (current && typeof current === "object") {
+    const code = String(current.code || "").trim();
+    if (code && !codes.includes(code)) codes.push(code);
+    current = current.innerError || current.innererror;
+  }
+  return codes;
 }
 
 
@@ -1558,49 +1588,112 @@ function handleOneDriveFailure(error) {
   setOneDriveStatus(message, true, failure);
 }
 function oneDriveErrorMessage(error) {
-  if (error?.status === 401) return "再ログインが必要です";
-  if (error?.status === 403) return "OneDriveの保存権限がありません";
+  const codes = normalizedOneDriveErrorCodes(error);
+  if (error?.status === 401 || codes.includes("unauthenticated")) return "再ログインが必要です";
+  if (error?.status === 507 || codes.includes("quotalimitreached")) return "OneDriveの空き容量がありません";
+  if (error?.status === 403 || codes.includes("accessdenied")) return "OneDriveの保存権限がありません";
   return "同期に失敗しました";
 }
 
 function oneDriveFailureDetails(error) {
   const message = String(error?.message || "").toLowerCase();
+  const codes = normalizedOneDriveErrorCodes(error);
+  const diagnostic = oneDriveDiagnosticLabel(error);
+  const withDiagnostic = (details) => ({ ...details, diagnostic });
   if (!navigator.onLine || error instanceof TypeError || message.includes("fetch") || message.includes("network")) {
-    return {
+    return withDiagnostic({
       description: "インターネット接続が途切れたため、OneDriveへ到達できなかった可能性があります。ノートはこの端末には残っています。",
       steps: ["Wi-Fiやインターネット接続を確認します。", "接続が戻ったら「もう一度同期」を押します。"],
       action: "retry",
-    };
+    });
   }
-  if (error?.status === 401) {
-    return {
+  if (error?.status === 401 || codes.includes("unauthenticated")) {
+    return withDiagnostic({
       description: "Microsoftとの接続期限が切れたため、OneDriveを利用できない状態です。",
       steps: ["「Microsoftへ再接続」を押します。", "保存先に使用しているMicrosoftアカウントでログインします。"],
       action: "reconnect",
-    };
+    });
   }
-  if (error?.status === 403) {
-    return {
+  if (error?.status === 507 || codes.includes("quotalimitreached")) {
+    return withDiagnostic({
+      description: "OneDriveの空き容量が不足しているため、ノートを保存できません。端末側のノートは保持されています。",
+      steps: ["OneDriveの不要なファイルを整理して空き容量を増やします。", "空き容量ができたら「もう一度同期」を押します。"],
+      action: "retry",
+    });
+  }
+  if (codes.includes("insufficient_claims")) {
+    return withDiagnostic({
+      description: "組織のセキュリティ設定により、ReRe-noteからOneDriveへの接続が制限されています。",
+      steps: ["職場・学校のMicrosoftアカウントを使用している場合は管理者へ確認します。", "個人用OneDriveを使う場合は、個人アカウントへ再接続します。"],
+      action: "reconnect",
+    });
+  }
+  if (error?.status === 403 || codes.some((code) => ["accessdenied", "accessrestricted", "notallowed"].includes(code))) {
+    return withDiagnostic({
       description: "Microsoftアカウントから、OneDriveへノートを保存する許可を得られませんでした。",
       steps: ["OneDriveを利用できるアカウントか確認します。", "「Microsoftへ再接続」を押し、アクセスを許可します。"],
       action: "reconnect",
-    };
+    });
+  }
+  if (error?.status === 413 || codes.includes("maxfilesizeexceeded")) {
+    return withDiagnostic({
+      description: "ノートの保存データが大きすぎるため、OneDriveへ送信できませんでした。",
+      steps: ["大きな画像を含むノートを減らすか、画像サイズを小さくします。", "変更後に「もう一度同期」を押します。"],
+      action: "retry",
+    });
+  }
+  if (codes.includes("itemnotfound") || error?.status === 404) {
+    return withDiagnostic({
+      description: "ReRe-noteの保存先をOneDrive内に準備できませんでした。",
+      steps: ["ブラウザ版OneDriveを一度開き、初期設定が完了していることを確認します。", "その後Microsoftへ再接続します。"],
+      action: "reconnect",
+    });
+  }
+  if (error?.status === 409 || codes.some((code) => ["namealreadyexists", "resourcemodified", "resyncrequired"].includes(code))) {
+    return withDiagnostic({
+      description: "OneDrive上のデータが同時に変更されたため、安全のため今回の同期を止めました。",
+      steps: ["ほかの端末でReRe-noteを編集中の場合は閉じます。", "少し待ってから「もう一度同期」を押します。"],
+      action: "retry",
+    });
   }
   if (message.includes("保存データを読み取れません")) {
-    return {
+    return withDiagnostic({
       description: "OneDrive上の保存データを安全に読み取れなかったため、上書きを止めています。端末側のノートは保持されています。",
       steps: ["まず「もう一度同期」を押します。", "繰り返し失敗する場合は、そのまま編集を続けずデータの確認が必要です。"],
       action: "retry",
-    };
+    });
   }
-  if (error?.status === 429 || Number(error?.status) >= 500) {
-    return {
+  if (error?.status === 429 || error?.status === 509 || Number(error?.status) >= 500 || codes.some((code) => ["activitylimitreached", "throttledrequest", "servicenotavailable"].includes(code))) {
+    return withDiagnostic({
       description: "Microsoft側が一時的に混み合っているか、サービスが応答していません。",
       steps: ["少し待ってから「もう一度同期」を押します。", "直らない場合はインターネット接続も確認します。"],
       action: "retry",
-    };
+    });
   }
-  return defaultOneDriveFailureDetails();
+  if (error?.status === 400 || codes.some((code) => ["invalidrequest", "notsupported"].includes(code))) {
+    return withDiagnostic({
+      description: "OneDriveがReRe-noteからの保存要求を受け付けませんでした。アプリ側で確認が必要なエラーです。",
+      steps: ["下の診断コードを控えます。", "一度だけ「もう一度同期」を試し、同じ場合は診断コードをお知らせください。"],
+      action: "retry",
+    });
+  }
+  return { ...defaultOneDriveFailureDetails(), diagnostic };
+}
+
+function normalizedOneDriveErrorCodes(error) {
+  return (Array.isArray(error?.codes) ? error.codes : [error?.code])
+    .map((code) => String(code || "").trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function oneDriveDiagnosticLabel(error) {
+  const parts = [];
+  if (error?.operation === "download") parts.push("読込");
+  if (error?.operation === "upload") parts.push("保存");
+  if (Number.isFinite(Number(error?.status))) parts.push(`HTTP ${Number(error.status)}`);
+  const codes = Array.isArray(error?.codes) ? error.codes.filter(Boolean) : [];
+  if (codes.length) parts.push(codes.join(" → "));
+  return parts.length ? `診断コード: ${parts.join(" / ")}` : "";
 }
 
 function defaultOneDriveFailureDetails() {

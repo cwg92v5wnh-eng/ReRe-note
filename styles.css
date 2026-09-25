@@ -897,6 +897,22 @@ body.is-onedrive-busy .sync-status::before {
   line-height: 1.75;
 }
 
+.sync-help-diagnostic {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgba(66, 90, 74, 0.07);
+  color: var(--muted);
+  font-family: Consolas, "SFMono-Regular", monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sync-help-diagnostic[hidden] {
+  display: none;
+}
+
 .sync-help-next {
   margin-top: 20px;
   padding: 16px 18px;
